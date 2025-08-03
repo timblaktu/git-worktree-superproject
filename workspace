@@ -1,0 +1,217 @@
+#!/bin/bash
+# workspace - Manage multi-repo workspaces without submodules
+
+set -euo pipefail
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="$SCRIPT_DIR/workspace.conf"
+WORKTREES_DIR="$SCRIPT_DIR/worktrees"
+
+# Load repository URLs from config
+load_repos() {
+    local repos=()
+    [[ ! -f "$CONFIG_FILE" ]] && return
+    
+    while read -r line; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        repos+=("$line")
+    done < "$CONFIG_FILE"
+    
+    [[ ${#repos[@]} -gt 0 ]] && printf '%s\n' "${repos[@]}"
+}
+
+# Extract repo name from URL
+get_repo_name() {
+    local url="$1"
+    basename "${url%.git}"
+}
+
+# Initialize workspace
+init_workspace() {
+    local branch="${1:-main}"
+    local workspace_dir="$WORKTREES_DIR/$branch"
+    
+    echo "Initializing workspace: $branch"
+    mkdir -p "$workspace_dir"
+    
+    while read -r repo_line; do
+        read -ra parts <<< "$repo_line"
+        local url="${parts[0]}"
+        local repo_branch="${parts[1]:-$branch}"
+        local ref="${parts[2]:-}"
+        local name=$(get_repo_name "$url")
+        local repo_path="$workspace_dir/$name"
+        
+        [[ -d "$repo_path" ]] && { echo "  $name exists, skipping"; continue; }
+        
+        echo "  Cloning $name..."
+        if git ls-remote --heads "$url" "$repo_branch" 2>/dev/null | grep -q "$repo_branch"; then
+            git clone -b "$repo_branch" "$url" "$repo_path" --quiet
+        else
+            git clone "$url" "$repo_path" --quiet
+            (cd "$repo_path" && git checkout -b "$branch" 2>/dev/null || git checkout "$branch")
+        fi
+        
+        [[ -n "$ref" ]] && (cd "$repo_path" && git checkout "$ref" --quiet)
+    done < <(load_repos)
+    
+    echo "Workspace initialized: $workspace_dir"
+}
+
+# Sync workspace
+sync_workspace() {
+    local branch="${1:-$(basename "$PWD")}"
+    local workspace_dir="$WORKTREES_DIR/$branch"
+    
+    [[ ! -d "$workspace_dir" ]] && { echo "Workspace not found: $branch"; exit 1; }
+    
+    echo "Syncing workspace: $branch"
+    
+    while read -r repo_line; do
+        read -ra parts <<< "$repo_line"
+        local url="${parts[0]}"
+        local ref="${parts[2]:-}"
+        local name=$(get_repo_name "$url")
+        local repo_path="$workspace_dir/$name"
+        
+        [[ ! -d "$repo_path" ]] && continue
+        
+        if [[ -n "$ref" ]]; then
+            echo "  $name is pinned, skipping"
+        else
+            echo "  Updating $name..."
+            (cd "$repo_path" && git pull --ff-only)
+        fi
+    done < <(load_repos)
+}
+
+# Show status
+show_status() {
+    echo "Workspace Status"
+    echo "================"
+    
+    [[ ! -d "$WORKTREES_DIR" ]] && { echo "No workspaces found"; return; }
+    
+    for workspace_dir in "$WORKTREES_DIR"/*; do
+        [[ ! -d "$workspace_dir" ]] && continue
+        
+        local workspace=$(basename "$workspace_dir")
+        echo -e "\n$workspace"
+        echo "----------------------------------------"
+        
+        while read -r repo_line; do
+            read -ra parts <<< "$repo_line"
+            local url="${parts[0]}"
+            local name=$(get_repo_name "$url")
+            local repo_path="$workspace_dir/$name"
+            
+            [[ ! -d "$repo_path/.git" ]] && { printf "  %-20s [missing]\n" "$name:"; continue; }
+            
+            (
+                cd "$repo_path"
+                local branch=$(git branch --show-current || git describe --always)
+                local status=$(git status --porcelain)
+                printf "  %-20s %-20s %s\n" "$name:" "$branch" "[$([ -n "$status" ] && echo "modified" || echo "clean")]"
+            )
+        done < <(load_repos)
+    done
+}
+
+# Execute command in all repos (like git submodule foreach)
+foreach_repos() {
+    shift  # Remove 'foreach' from arguments
+    
+    local quiet=false
+    if [[ "$1" == "--quiet" || "$1" == "-q" ]]; then
+        quiet=true
+        shift
+    fi
+    
+    local workspace_dir="$WORKTREES_DIR/$(basename "$PWD")"
+    [[ ! -d "$workspace_dir" ]] && { echo "Not in workspace"; exit 1; }
+    while read -r repo_line; do
+        read -ra parts <<< "$repo_line"
+        local url="${parts[0]}"
+        local name=$(get_repo_name "$url")
+        local repo_path="$workspace_dir/$name"
+        local displaypath="${repo_path#$workspace_dir/}"
+        
+        if [[ -d "$repo_path/.git" ]]; then
+            # Export variables like git submodule foreach
+            export name="$name"
+            export path="$displaypath"
+            export displaypath="$displaypath"
+            export toplevel="$workspace_dir"
+            
+            if [[ "$quiet" == false ]]; then
+                echo "=== $name ==="
+            fi
+            (cd "$repo_path" && eval "$@")
+            if [[ "$quiet" == false ]]; then
+                echo
+            fi
+        fi
+    done < <(load_repos)
+}
+
+# List workspaces
+list_workspaces() {
+    echo "Available Workspaces"
+    echo "==================="
+    
+    [[ ! -d "$WORKTREES_DIR" ]] && { echo "No workspaces found"; return; }
+    
+    for workspace_dir in "$WORKTREES_DIR"/*; do
+        [[ -d "$workspace_dir" ]] && echo "  $(basename "$workspace_dir")"
+    done
+}
+
+# Clean workspace
+clean_workspace() {
+    local branch="${1}"
+    [[ -z "$branch" ]] && { echo "Workspace name required"; exit 1; }
+    
+    local workspace_dir="$WORKTREES_DIR/$branch"
+    [[ ! -d "$workspace_dir" ]] && { echo "Workspace not found: $branch"; exit 1; }
+    
+    echo "Delete workspace: $branch? (y/N) "
+    read -r -n 1
+    echo
+    
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        rm -rf "$workspace_dir"
+        echo "Workspace removed"
+    else
+        echo "Cancelled"
+    fi
+}
+
+# Main
+case "${1:-help}" in
+    init)   init_workspace "${2:-main}" ;;
+    sync)   sync_workspace "${2:-}" ;;
+    status) show_status ;;
+    foreach) foreach_repos "$@" ;;
+    list)   list_workspaces ;;
+    clean)  clean_workspace "${2:-}" ;;
+    help|*)
+        cat << EOF
+Workspace Manager - Submodule-free multi-repo development
+
+Usage: workspace <command> [arguments]
+
+Commands:
+  init [branch]     Initialize workspace (default: main)
+  sync [branch]     Sync repositories
+  status            Show all workspace status
+  foreach <cmd>     Execute command in all repos
+  list              List workspaces
+  clean <branch>    Remove workspace
+
+Configuration:
+  Edit workspace.conf to define repositories
+EOF
+        ;;
+esac

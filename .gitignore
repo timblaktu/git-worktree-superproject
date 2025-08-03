@@ -1,0 +1,22 @@
+worktrees/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+*.pyc
+__pycache__/
+.tox/
+*.egg-info/
+
+# UV
+.venv/
+.python-version
+
+# IDE
+.vscode/
+.idea/
+
+CLAUDE.md
+**/*.vim
+**/*.log
