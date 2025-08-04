@@ -12,6 +12,7 @@ test = [
     "pytest-mock>=3.11.0",
     "pytest-timeout>=2.1.0",
     "pytest-xdist>=3.3.0",
+    "pytest-result-bar @ git+https://github.com/timblaktu/pytest-result-bar.git",
 ]
 
 [tool.pytest.ini_options]
@@ -24,7 +25,7 @@ addopts = [
     "--tb=short",
     "--disable-warnings",
     "-m", "not network",  # Exclude network tests by default
-    "--result-bar",  # Use our custom progress bar
+    "--result-bar",  # Enable pytest-result-bar plugin
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -50,6 +51,9 @@ exclude_lines = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["test"]

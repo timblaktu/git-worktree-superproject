@@ -10,8 +10,8 @@ from typing import Generator, List, Tuple
 import pytest
 
 
-# Import our custom plugin
-pytest_plugins = ["test.pytest_result_bar"]
+# pytest-result-bar plugin will auto-register via entry points
+# No need to manually specify pytest_plugins anymore
 
 
 @pytest.fixture

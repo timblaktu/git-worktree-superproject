@@ -20,3 +20,4 @@ __pycache__/
 CLAUDE.md
 **/*.vim
 **/*.log
+pytest-result-bar/
