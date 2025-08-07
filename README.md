@@ -58,7 +58,7 @@ https://github.com/third-party/lib.git master 3a4b5c6
 
 4. **Create your first workspace:**
 ```bash
-./workspace init main
+./workspace switch main
 cd worktrees/main
 # All repositories are now available and ready for development
 ```
@@ -120,17 +120,17 @@ https://github.com/third-party/lib.git main 3a4b5c6
 
 ## Commands
 
-### `workspace init [branch]`
-Initialize a new workspace for the specified branch (defaults to `main`).
+### `workspace switch [branch]`
+Switch to a workspace for the specified branch, creating it if needed (defaults to `main`).
 
 ```bash
-./workspace init                    # Create main workspace
-./workspace init feature-payment    # Create feature branch workspace
-./workspace init release-v2.0       # Create release workspace
+./workspace switch                    # Switch to main workspace
+./workspace switch feature-payment    # Switch to feature branch workspace
+./workspace switch release-v2.0       # Switch to release workspace
 ```
 
 **Behavior:**
-- Creates `worktrees/[branch]` directory
+- Creates `worktrees/[branch]` directory if it doesn't exist
 - Clones all repositories from `workspace.conf`
 - Repositories track workspace branch unless configured otherwise
 - Pinned repositories checkout to specific refs (detached HEAD)
@@ -234,7 +234,7 @@ Show help information and usage examples.
 ### 1. **Feature Development**
 ```bash
 # Start new feature
-./workspace init feature-user-auth
+./workspace switch feature-user-auth
 cd worktrees/feature-user-auth
 
 # Work across repositories
@@ -249,7 +249,7 @@ cd worktrees/feature-user-auth
 ### 2. **Release Management**
 ```bash
 # Create release workspace
-./workspace init release-v2.0
+./workspace switch release-v2.0
 cd worktrees/release-v2.0
 
 # Prepare release
@@ -272,18 +272,18 @@ https://github.com/vendor/sdk.git main v1.0.0
 https://github.com/vendor/sdk.git main v1.2.0
 ```
 
-Then reinitialize workspaces:
+Then recreate workspaces:
 ```bash
 ./workspace clean main
-./workspace init main
+./workspace switch main
 ```
 
 ### 4. **Parallel Development**
 ```bash
 # Multiple developers, multiple features
-./workspace init feature-payments
-./workspace init feature-notifications  
-./workspace init hotfix-security
+./workspace switch feature-payments
+./workspace switch feature-notifications  
+./workspace switch hotfix-security
 
 # Each workspace is completely isolated
 ./workspace status  # See all active workspaces
@@ -295,8 +295,8 @@ Then reinitialize workspaces:
 # ci-build.sh
 set -e
 
-# Initialize workspace for current branch
-./workspace init "$GITHUB_REF_NAME"
+# Switch to workspace for current branch
+./workspace switch "$GITHUB_REF_NAME"
 cd "worktrees/$GITHUB_REF_NAME"
 
 # Build everything
@@ -356,7 +356,7 @@ https://github.com/vendor/sdk.git main v1.0.0
 
 Use with:
 ```bash
-CONFIG_FILE=workspace-dev.conf ./workspace init develop
+CONFIG_FILE=workspace-dev.conf ./workspace switch develop
 ```
 
 ## Migration from Git Submodules
@@ -385,7 +385,7 @@ git commit -m "Migrate from submodules to wt-super"
 
 ### 3. Start Using wt-super
 ```bash
-./workspace init main
+./workspace switch main
 # Your repositories are now managed by wt-super!
 ```
 
@@ -424,7 +424,7 @@ git commit -m "Migrate from submodules to wt-super"
 Run with verbose output:
 ```bash
 set -x
-./workspace init feature-test
+./workspace switch feature-test
 set +x
 ```
 
@@ -436,6 +436,18 @@ See [README_TESTING.md](README_TESTING.md) for comprehensive test suite document
 ```bash
 uv run --extra test pytest  # Runs all tests (100+) with enhanced output
 ```
+
+**Using Nix:**
+If you have Nix available (common on NixOS, but works anywhere Nix is installed), you can use this approach to avoid UV's Python download issues:
+```bash
+# Run tests with Nix-provided Python and parallel execution
+nix-shell -p python312 uv bash git --run "UV_PYTHON_DOWNLOADS=never uv run --extra test pytest -n auto"
+
+# Or for non-parallel execution
+nix-shell -p python312 uv bash git --run "UV_PYTHON_DOWNLOADS=never uv run --extra test pytest"
+```
+
+This forces UV to use Nix's properly-linked Python while maintaining UV's dependency management.
 
 **Enhanced Test Output:**
 This project uses `pytest-rich` for improved test output featuring:
@@ -475,6 +487,9 @@ uv run --extra test pytest -m "slow"
 
 # Only network tests (may prompt for credentials - requires internet)
 uv run --extra test pytest -m "network"
+
+# Nix equivalents (add parallel execution with -n auto)
+nix-shell -p python312 uv bash git --run "UV_PYTHON_DOWNLOADS=never uv run --extra test pytest -m 'not network' -n auto"
 
 # All tests including network (use with caution - may prompt for credentials)
 uv run --extra test pytest

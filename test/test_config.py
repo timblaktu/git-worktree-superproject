@@ -24,7 +24,7 @@ class TestConfigurationParsing:
         ])
         config_path.write_text(config_content)
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Check only specified repos were cloned
@@ -44,7 +44,7 @@ class TestConfigurationParsing:
         ])
         config_path.write_text(config_content)
         
-        result = run_workspace("init", "main")
+        result = run_workspace("switch", "main")
         assert result.returncode == 0
         
         # Verify branches
@@ -88,7 +88,7 @@ class TestConfigurationParsing:
         ])
         config_path.write_text(config_content)
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Verify repo-c is at tag v1.0.0
@@ -118,7 +118,7 @@ class TestConfigurationParsing:
         ])
         config_path.write_text(config_content)
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # All repos should be cloned
@@ -132,7 +132,7 @@ class TestConfigurationParsing:
         config_path = temp_workspace / "workspace.conf"
         config_path.write_text("")
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         # Should succeed but create empty workspace
         assert result.returncode == 0
         assert Path("worktrees/main").exists()
@@ -149,7 +149,7 @@ class TestConfigurationParsing:
         ])
         config_path.write_text(config_content)
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         assert Path("worktrees/main").exists()
 
@@ -163,7 +163,7 @@ class TestConfigurationErrors:
         if config_path.exists():
             config_path.unlink()
         
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         assert result.returncode == 0  # Should succeed with empty workspace
     
     def test_invalid_git_url(self, run_workspace, temp_workspace, clean_workspace):
@@ -172,5 +172,5 @@ class TestConfigurationErrors:
         config_content = "not-a-valid-git-url\n"
         config_path.write_text(config_content)
         
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         assert result.returncode != 0

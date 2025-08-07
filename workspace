@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # workspace - Manage multi-repo workspaces without submodules
 
 set -euo pipefail
@@ -28,12 +28,12 @@ get_repo_name() {
     basename "${url%.git}"
 }
 
-# Initialize workspace
-init_workspace() {
+# Switch to workspace (create if doesn't exist)
+switch_workspace() {
     local branch="${1:-main}"
     local workspace_dir="$WORKTREES_DIR/$branch"
     
-    echo "Initializing workspace: $branch"
+    echo "Switching to workspace: $branch"
     mkdir -p "$workspace_dir"
     
     while read -r repo_line; do
@@ -57,7 +57,7 @@ init_workspace() {
         [[ -n "$ref" ]] && (cd "$repo_path" && git checkout "$ref" --quiet)
     done < <(load_repos)
     
-    echo "Workspace initialized: $workspace_dir"
+    echo "Workspace ready: $workspace_dir"
 }
 
 # Sync workspace
@@ -190,7 +190,7 @@ clean_workspace() {
 
 # Main
 case "${1:-help}" in
-    init)   init_workspace "${2:-main}" ;;
+    switch) switch_workspace "${2:-main}" ;;
     sync)   sync_workspace "${2:-}" ;;
     status) show_status ;;
     foreach) foreach_repos "$@" ;;
@@ -203,7 +203,7 @@ Workspace Manager - Submodule-free multi-repo development
 Usage: workspace <command> [arguments]
 
 Commands:
-  init [branch]     Initialize workspace (default: main)
+  switch [branch]   Switch to workspace, create if needed (default: main)
   sync [branch]     Sync repositories
   status            Show all workspace status
   foreach <cmd>     Execute command in all repos

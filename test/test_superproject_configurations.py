@@ -25,7 +25,7 @@ class TestSuperProjectMatrix:
         # Get the actual fixture by name
         config = request.getfixturevalue(config_fixture)
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Count actual cloned repositories
@@ -52,7 +52,7 @@ class TestSuperProjectMatrix:
     def test_repository_tracking_modes(self, run_workspace, heterogeneous_superproject_config, 
                                      clean_workspace, tracking_mode, expected_behavior):
         """Test different repository tracking modes in super-projects."""
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         workspace_dir = Path("worktrees/main")
@@ -86,7 +86,7 @@ class TestReferenceTypes:
     
     def test_tag_references(self, run_workspace, reference_types_config, clean_workspace):
         """Test repositories pinned to git tags."""
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         workspace_dir = Path("worktrees/main")
@@ -108,7 +108,7 @@ class TestReferenceTypes:
     
     def test_commit_sha_references(self, run_workspace, reference_types_config, clean_workspace):
         """Test repositories pinned to specific commit SHAs."""
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         workspace_dir = Path("worktrees/main")
@@ -134,7 +134,7 @@ class TestReferenceTypes:
     
     def test_branch_plus_commit_combinations(self, run_workspace, reference_types_config, clean_workspace):
         """Test configurations with branch + commit combinations."""
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Verify the workspace was created successfully
@@ -151,7 +151,7 @@ class TestHeterogeneousConfigurations:
     
     def test_mixed_head_and_detached_repos(self, run_workspace, heterogeneous_superproject_config, clean_workspace):
         """Test super-project with both HEAD-tracking and detached repositories."""
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         workspace_dir = Path("worktrees/main")
@@ -191,8 +191,8 @@ class TestHeterogeneousConfigurations:
     
     def test_sync_behavior_with_mixed_tracking(self, run_workspace, heterogeneous_superproject_config, clean_workspace):
         """Test sync behavior with mixed HEAD-tracking and pinned repositories."""
-        # Initialize workspace
-        run_workspace("init")
+        # Switch to workspace
+        run_workspace("switch")
         
         # Test sync operation (may need to be in workspace directory)
         result = run_workspace("sync", check=False)
@@ -207,7 +207,7 @@ class TestHeterogeneousConfigurations:
                                                            heterogeneous_superproject_config, 
                                                            clean_workspace, workspace_branch):
         """Test heterogeneous configurations with different workspace branch names."""
-        result = run_workspace("init", workspace_branch)
+        result = run_workspace("switch", workspace_branch)
         assert result.returncode == 0
         
         workspace_dir = Path(f"worktrees/{workspace_branch}")
@@ -223,7 +223,7 @@ class TestSuperProjectScaleScenarios:
     
     def test_minimal_superproject(self, run_workspace, minimal_superproject_config, clean_workspace):
         """Test minimal super-project with just 1-2 repositories."""
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         workspace_dir = Path("worktrees/main")
@@ -248,7 +248,7 @@ class TestSuperProjectScaleScenarios:
     
     def test_large_superproject_operations(self, run_workspace, large_superproject_config, clean_workspace):
         """Test operations on large super-project with many repository entries."""
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Despite 24 config entries, should only have 3 unique repos
@@ -272,7 +272,7 @@ class TestSuperProjectScaleScenarios:
         config_path = temp_workspace / "workspace.conf"
         config_path.write_text("# Empty super-project\n")
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         workspace_dir = Path("worktrees/main")
@@ -311,7 +311,7 @@ class TestSuperProjectWorkflowIntegration:
 """
         config_path.write_text(config_content)
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Should handle duplicate repos with different configurations
@@ -344,7 +344,7 @@ class TestSuperProjectWorkflowIntegration:
 """
         config_path.write_text(config_content)
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Verify mixed tracking modes work for migration scenario
@@ -376,7 +376,7 @@ class TestSuperProjectWorkflowIntegration:
         config_path.write_text(config_content)
         
         # Test release workspace
-        result = run_workspace("init", "release-v2.0")
+        result = run_workspace("switch", "release-v2.0")
         assert result.returncode == 0
         
         workspace_dir = Path("worktrees/release-v2.0")

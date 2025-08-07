@@ -38,7 +38,7 @@ class TestConfigurationValidation:
 """
         config_path.write_text(config_content)
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Should have parsed the valid repositories
@@ -59,7 +59,7 @@ class TestConfigurationValidation:
 """
         config_path.write_text(config_content)
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Should handle unicode in comments gracefully
@@ -85,7 +85,7 @@ class TestMalformedReferences:
         config_path.write_text(config_content)
         
         # Should handle invalid SHAs gracefully
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         
         # Some repos should still be cloned successfully
         workspace_dir = Path("worktrees/main")
@@ -108,7 +108,7 @@ class TestMalformedReferences:
 """
         config_path.write_text(config_content)
         
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         
         # Should handle non-existent tags gracefully
         workspace_dir = Path("worktrees/main")
@@ -131,7 +131,7 @@ class TestMalformedReferences:
 """
         config_path.write_text(config_content)
         
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         
         # Should handle non-existent branches - may create them or use default
         workspace_dir = Path("worktrees/main")
@@ -162,7 +162,7 @@ class TestMalformedReferences:
         config_path.write_text(config_content)
         
         # Should handle malformed lines gracefully
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         
         # Valid repos should still be processed
         workspace_dir = Path("worktrees/main") 
@@ -186,7 +186,7 @@ class TestRepositoryAccessIssues:
 """
         config_path.write_text(config_content)
         
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         # Should fail gracefully for non-existent repos
         assert result.returncode != 0 or "not found" in result.stderr.lower()
     
@@ -204,7 +204,7 @@ class TestRepositoryAccessIssues:
 """
         config_path.write_text(config_content)
         
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         
         # Should handle valid absolute paths
         workspace_dir = Path("worktrees/main")
@@ -217,15 +217,15 @@ class TestRepositoryAccessIssues:
 class TestConcurrentOperations:
     """Test concurrent operations and race conditions in super-project management."""
     
-    def test_concurrent_init_operations(self, run_workspace, heterogeneous_superproject_config, clean_workspace):
-        """Test concurrent workspace initialization."""
+    def test_concurrent_switch_operations(self, run_workspace, heterogeneous_superproject_config, clean_workspace):
+        """Test concurrent workspace switching."""
         # This test checks basic operation - real concurrency testing would need threading
         
-        # Initialize multiple workspaces in sequence to test isolation
-        result1 = run_workspace("init", "workspace1")
+        # Switch to multiple workspaces in sequence to test isolation
+        result1 = run_workspace("switch", "workspace1")
         assert result1.returncode == 0
         
-        result2 = run_workspace("init", "workspace2")  
+        result2 = run_workspace("switch", "workspace2")  
         assert result2.returncode == 0
         
         # Both workspaces should exist and be independent
@@ -244,8 +244,8 @@ class TestConcurrentOperations:
     
     def test_status_during_operations(self, run_workspace, heterogeneous_superproject_config, clean_workspace):
         """Test status command during other operations."""
-        # Initialize workspace
-        run_workspace("init")
+        # Switch to workspace
+        run_workspace("switch")
         
         # Status should work even during sync operations
         result = run_workspace("status")
@@ -271,8 +271,8 @@ class TestCorruptedRepositories:
 """
         config_path.write_text(config_content)
         
-        # Initialize workspace
-        result = run_workspace("init")
+        # Switch to workspace
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         workspace_dir = Path("worktrees/main")
@@ -285,15 +285,15 @@ class TestCorruptedRepositories:
             if git_dir.exists():
                 shutil.rmtree(git_dir)
         
-        # Re-running init should handle the corrupted state
-        result = run_workspace("init")
+        # Re-running switch should handle the corrupted state
+        result = run_workspace("switch")
         # Should either fix the repo or skip it gracefully
         assert result.returncode == 0
     
     def test_missing_worktree_directories(self, run_workspace, heterogeneous_superproject_config, clean_workspace):
         """Test handling of missing worktree directories."""
-        # Initialize workspace
-        run_workspace("init")
+        # Switch to workspace
+        run_workspace("switch")
         
         # Remove worktrees directory
         worktrees_dir = Path("worktrees")
@@ -312,7 +312,7 @@ class TestScaleAndResourceLimits:
     
     def test_large_number_of_repositories(self, run_workspace, large_superproject_config, clean_workspace):
         """Test handling of configurations with many repository entries."""
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Should handle large configs without issues
@@ -346,7 +346,7 @@ class TestScaleAndResourceLimits:
 """
         config_path.write_text(config_content)
         
-        result = run_workspace("init", workspace_name)
+        result = run_workspace("switch", workspace_name)
         # May not support nested paths, but should fail gracefully
         
         if result.returncode == 0:

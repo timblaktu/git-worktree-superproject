@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 
-class TestWorkspaceInit:
-    """Test workspace init command."""
+class TestWorkspaceSwitch:
+    """Test workspace switch command."""
     
     @pytest.mark.parametrize("branch_name,expected_branch", [
         ("main", "main"),
@@ -17,13 +17,13 @@ class TestWorkspaceInit:
         ("release/v1.0", "release/v1.0"),
         ("hotfix-urgent", "hotfix-urgent"),
     ])
-    def test_init_various_branches(self, run_workspace, workspace_config, clean_workspace, branch_name, expected_branch):
-        """Test initializing workspace with various branch names."""
-        result = run_workspace("init", branch_name)
+    def test_switch_various_branches(self, run_workspace, workspace_config, clean_workspace, branch_name, expected_branch):
+        """Test switching to workspace with various branch names."""
+        result = run_workspace("switch", branch_name)
         
         assert result.returncode == 0
-        assert f"Initializing workspace: {branch_name}" in result.stdout
-        assert "Workspace initialized:" in result.stdout
+        assert f"Switching to workspace: {branch_name}" in result.stdout
+        assert "Workspace ready:" in result.stdout
         
         # Check that worktrees directory was created
         worktrees = Path("worktrees")
@@ -36,13 +36,13 @@ class TestWorkspaceInit:
         assert (workspace / "repo-b").exists()
         assert (workspace / "repo-c").exists()
     
-    def test_init_default_branch(self, run_workspace, workspace_config, clean_workspace):
-        """Test initializing workspace with default (main) branch."""
-        result = run_workspace("init")
+    def test_switch_default_branch(self, run_workspace, workspace_config, clean_workspace):
+        """Test switching to workspace with default (main) branch."""
+        result = run_workspace("switch")
         
         assert result.returncode == 0
-        assert "Initializing workspace: main" in result.stdout
-        assert "Workspace initialized:" in result.stdout
+        assert "Switching to workspace: main" in result.stdout
+        assert "Workspace ready:" in result.stdout
         
         # Check that worktrees directory was created
         worktrees = Path("worktrees")
@@ -55,12 +55,12 @@ class TestWorkspaceInit:
         assert (main_workspace / "repo-b").exists()
         assert (main_workspace / "repo-c").exists()
     
-    def test_init_custom_branch(self, run_workspace, workspace_config, clean_workspace):
-        """Test initializing workspace with custom branch."""
-        result = run_workspace("init", "feature-test")
+    def test_switch_custom_branch(self, run_workspace, workspace_config, clean_workspace):
+        """Test switching to workspace with custom branch."""
+        result = run_workspace("switch", "feature-test")
         
         assert result.returncode == 0
-        assert "Initializing workspace: feature-test" in result.stdout
+        assert "Switching to workspace: feature-test" in result.stdout
         
         # Check workspace was created
         feature_workspace = Path("worktrees/feature-test")
@@ -76,19 +76,19 @@ class TestWorkspaceInit:
         )
         assert branch_result.stdout.strip() == "feature-test"
     
-    def test_init_existing_workspace(self, run_workspace, workspace_config, clean_workspace):
-        """Test initializing an already existing workspace."""
-        # First init
-        run_workspace("init", "main")
+    def test_switch_existing_workspace(self, run_workspace, workspace_config, clean_workspace):
+        """Test switching to an already existing workspace."""
+        # First switch
+        run_workspace("switch", "main")
         
-        # Second init should skip existing repos
-        result = run_workspace("init", "main")
+        # Second switch should skip existing repos
+        result = run_workspace("switch", "main")
         assert result.returncode == 0
         assert "exists, skipping" in result.stdout
     
-    def test_init_with_pinned_repo(self, run_workspace, complex_workspace_config, clean_workspace):
-        """Test initializing workspace with pinned repository."""
-        result = run_workspace("init")
+    def test_switch_with_pinned_repo(self, run_workspace, complex_workspace_config, clean_workspace):
+        """Test switching to workspace with pinned repository."""
+        result = run_workspace("switch")
         
         assert result.returncode == 0
         
@@ -102,14 +102,14 @@ class TestWorkspaceInit:
         )
         assert tag_result.stdout.strip() == "v1.0.0"
     
-    def test_init_no_config(self, run_workspace, temp_workspace, clean_workspace):
-        """Test init command without configuration file."""
+    def test_switch_no_config(self, run_workspace, temp_workspace, clean_workspace):
+        """Test switch command without configuration file."""
         # Remove config file
         config_path = temp_workspace / "workspace.conf"
         if config_path.exists():
             config_path.unlink()
         
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         assert result.returncode == 0  # Should succeed with empty workspace
 
 
@@ -118,8 +118,8 @@ class TestWorkspaceSync:
     
     def test_sync_current_workspace(self, run_workspace, workspace_config, clean_workspace):
         """Test syncing current workspace."""
-        # Initialize workspace first
-        run_workspace("init", "main")
+        # Switch to workspace first
+        run_workspace("switch", "main")
         
         # Make a change in original repo
         repos_dir = Path("..").resolve() / "repos"
@@ -147,7 +147,7 @@ class TestWorkspaceSync:
     
     def test_sync_specific_workspace(self, run_workspace, workspace_config, clean_workspace):
         """Test syncing specific workspace by name."""
-        run_workspace("init", "develop")
+        run_workspace("switch", "develop")
         
         result = run_workspace("sync", "develop")
         assert result.returncode == 0
@@ -155,7 +155,7 @@ class TestWorkspaceSync:
     
     def test_sync_pinned_repo_skipped(self, run_workspace, complex_workspace_config, clean_workspace):
         """Test that pinned repositories are skipped during sync."""
-        run_workspace("init")
+        run_workspace("switch")
         
         os.chdir("worktrees/main")
         result = run_workspace("sync")
@@ -184,7 +184,7 @@ class TestWorkspaceStatus:
     
     def test_status_single_workspace(self, run_workspace, workspace_config, clean_workspace):
         """Test status with single workspace."""
-        run_workspace("init")
+        run_workspace("switch")
         
         result = run_workspace("status")
         assert result.returncode == 0
@@ -196,7 +196,7 @@ class TestWorkspaceStatus:
     
     def test_status_modified_repo(self, run_workspace, workspace_config, clean_workspace):
         """Test status shows modified repositories."""
-        run_workspace("init")
+        run_workspace("switch")
         
         # Modify a file in repo-a
         repo_a_path = Path("worktrees/main/repo-a")
@@ -208,8 +208,8 @@ class TestWorkspaceStatus:
     
     def test_status_multiple_workspaces(self, run_workspace, workspace_config, clean_workspace):
         """Test status with multiple workspaces."""
-        run_workspace("init", "main")
-        run_workspace("init", "develop")
+        run_workspace("switch", "main")
+        run_workspace("switch", "develop")
         
         result = run_workspace("status")
         assert result.returncode == 0
@@ -222,7 +222,7 @@ class TestWorkspaceForeach:
     
     def test_foreach_simple_command(self, run_workspace, workspace_config, clean_workspace):
         """Test executing simple command in all repos."""
-        run_workspace("init")
+        run_workspace("switch")
         
         os.chdir("worktrees/main")
         result = run_workspace("foreach", "pwd")
@@ -237,7 +237,7 @@ class TestWorkspaceForeach:
     
     def test_foreach_git_command(self, run_workspace, workspace_config, clean_workspace):
         """Test executing git command in all repos."""
-        run_workspace("init")
+        run_workspace("switch")
         
         os.chdir("worktrees/main")
         result = run_workspace("foreach", "git", "status", "-s")
@@ -256,7 +256,7 @@ class TestWorkspaceForeach:
     
     def test_foreach_with_environment_variables(self, run_workspace, workspace_config, clean_workspace):
         """Test foreach command provides environment variables."""
-        run_workspace("init")
+        run_workspace("switch")
         
         os.chdir("worktrees/main")
         result = run_workspace("foreach", "echo name=$name path=$path")
@@ -268,7 +268,7 @@ class TestWorkspaceForeach:
     
     def test_foreach_quiet_mode(self, run_workspace, workspace_config, clean_workspace):
         """Test foreach command with --quiet flag."""
-        run_workspace("init")
+        run_workspace("switch")
         
         os.chdir("worktrees/main")
         result = run_workspace("foreach", "--quiet", "pwd")
@@ -280,7 +280,7 @@ class TestWorkspaceForeach:
     @pytest.mark.parametrize("flags", ["-q", "--quiet"])
     def test_foreach_quiet_flags(self, run_workspace, workspace_config, clean_workspace, flags):
         """Test foreach command with different quiet flag formats."""
-        run_workspace("init")
+        run_workspace("switch")
         
         os.chdir("worktrees/main")
         result = run_workspace("foreach", flags, "echo test")
@@ -304,7 +304,7 @@ class TestWorkspaceForeach:
     ])
     def test_foreach_shell_features(self, run_workspace, workspace_config, clean_workspace, command, expected_in_output):
         """Test foreach with various shell features."""
-        run_workspace("init")
+        run_workspace("switch")
         
         os.chdir("worktrees/main")
         result = run_workspace("foreach", command)
@@ -326,7 +326,7 @@ class TestWorkspaceList:
     
     def test_list_single_workspace(self, run_workspace, workspace_config, clean_workspace):
         """Test listing with single workspace."""
-        run_workspace("init")
+        run_workspace("switch")
         
         result = run_workspace("list")
         assert result.returncode == 0
@@ -334,9 +334,9 @@ class TestWorkspaceList:
     
     def test_list_multiple_workspaces(self, run_workspace, workspace_config, clean_workspace):
         """Test listing with multiple workspaces."""
-        run_workspace("init", "main")
-        run_workspace("init", "develop")
-        run_workspace("init", "feature-xyz")
+        run_workspace("switch", "main")
+        run_workspace("switch", "develop")
+        run_workspace("switch", "feature-xyz")
         
         result = run_workspace("list")
         assert result.returncode == 0
@@ -350,7 +350,7 @@ class TestWorkspaceClean:
     
     def test_clean_with_confirmation(self, run_workspace, workspace_config, clean_workspace):
         """Test cleaning workspace with confirmation."""
-        run_workspace("init", "test-branch")
+        run_workspace("switch", "test-branch")
         
         # Confirm deletion
         result = run_workspace("clean", "test-branch", input="y\n")
@@ -364,7 +364,7 @@ class TestWorkspaceClean:
     
     def test_clean_cancelled(self, run_workspace, workspace_config, clean_workspace):
         """Test cancelling workspace cleanup."""
-        run_workspace("init", "test-branch")
+        run_workspace("switch", "test-branch")
         
         # Cancel deletion
         result = run_workspace("clean", "test-branch", input="n\n")
@@ -401,7 +401,7 @@ class TestWorkspaceHelp:
         assert "Workspace Manager" in result.stdout
         assert "Usage:" in result.stdout
         assert "Commands:" in result.stdout
-        assert "init" in result.stdout
+        assert "switch" in result.stdout
         assert "sync" in result.stdout
         assert "status" in result.stdout
         assert "foreach" in result.stdout
@@ -436,7 +436,7 @@ class TestStatusVariations:
     
     def test_status_with_uncommitted_changes(self, run_workspace, workspace_config, clean_workspace):
         """Test status shows correct state for repos with uncommitted changes."""
-        run_workspace("init")
+        run_workspace("switch")
         
         # Create different types of changes
         workspace_path = Path("worktrees/main")
@@ -466,7 +466,7 @@ class TestStatusVariations:
         workspace_names = [f"workspace-{i}" for i in range(num_workspaces)]
         
         for name in workspace_names:
-            run_workspace("init", name)
+            run_workspace("switch", name)
         
         result = run_workspace("status")
         assert result.returncode == 0
