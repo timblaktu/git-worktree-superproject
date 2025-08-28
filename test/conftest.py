@@ -187,7 +187,8 @@ def run_workspace(workspace_script: Path):
             capture_output=capture_output,
             text=text,
             input=input,
-            env=run_env
+            env=run_env,
+            cwd=os.getcwd()  # Run from current test directory
         )
         return result
     return _run

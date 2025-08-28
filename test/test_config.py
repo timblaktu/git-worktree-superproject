@@ -127,31 +127,23 @@ class TestConfigurationParsing:
         assert (workspace_dir / "repo-b").exists()
         assert (workspace_dir / "repo-c").exists()
     
-    def test_empty_config(self, run_workspace, temp_workspace, clean_workspace):
-        """Test empty configuration file."""
+    @pytest.mark.parametrize("config_content,test_description", [
+        ("", "empty configuration file"),
+        ("\n\n\n", "only newlines"),
+        ("# Just comments here\n# No actual repos\n\n# More comments\n", "only comments"),
+        ("  \t  \n  \t\n", "only whitespace"),
+        ("# Comment\n\n# Another comment\n\n\n", "comments and empty lines"),
+    ])
+    def test_empty_or_comment_only_configs(self, run_workspace, temp_workspace, clean_workspace,
+                                           config_content, test_description):
+        """Test configurations with no actual repository entries."""
         config_path = temp_workspace / "workspace.conf"
-        config_path.write_text("")
-        
-        result = run_workspace("switch")
-        # Should succeed but create empty workspace
-        assert result.returncode == 0
-        assert Path("worktrees/main").exists()
-    
-    def test_config_only_comments(self, run_workspace, temp_workspace, clean_workspace):
-        """Test configuration with only comments."""
-        config_path = temp_workspace / "workspace.conf"
-        config_content = "\n".join([
-            "# Just comments here",
-            "# No actual repos",
-            "",
-            "# More comments",
-            ""  # Ensure trailing newline
-        ])
         config_path.write_text(config_content)
         
         result = run_workspace("switch")
-        assert result.returncode == 0
-        assert Path("worktrees/main").exists()
+        # Should succeed but create empty workspace
+        assert result.returncode == 0, f"Failed for {test_description}"
+        assert Path("worktrees/main").exists(), f"Workspace not created for {test_description}"
 
 
 class TestConfigurationErrors:

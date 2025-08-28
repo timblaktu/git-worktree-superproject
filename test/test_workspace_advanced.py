@@ -162,7 +162,8 @@ class TestRepositoryURLs:
             
             # The credential helper should be accessible from the subprocess
             if result.returncode == 0 and result.stdout.strip():
-                assert "store" in result.stdout or "helper" in result.stdout
+                # Accept various types of credential helpers: store, cache, helper, manager, etc.
+                assert any(helper in result.stdout for helper in ["store", "helper", "cache", "manager"])
             else:
                 # If no global config, that's also valid - just document it
                 print(f"No global credential helper found: stdout='{result.stdout}', stderr='{result.stderr}'")
@@ -198,8 +199,8 @@ class TestForeachCommands:
         ("git status | wc -l", lambda out: all(line.strip().isdigit() for line in out.strip().split('\n') if line.strip() and not line.startswith('==='))),
         ("echo 'test' > test.txt && cat test.txt", lambda out: "test" in out),
         
-        # Multi-line commands
-        ("if [ -d .git ]; then echo 'Is git repo'; fi", lambda out: "Is git repo" in out),
+        # Multi-line commands - check for both .git directory and .git file (worktrees)
+        ("if [ -d .git ] || [ -f .git ]; then echo 'Is git repo'; fi", lambda out: "Is git repo" in out),
     ])
     def test_foreach_various_commands(self, run_workspace, workspace_config, clean_workspace, command, check_output):
         """Test foreach with various shell commands."""
@@ -388,7 +389,26 @@ class TestScaleAndPerformance:
             repo_name = f"scale-repo-{i:02d}"
             repo_path = repos_dir / repo_name
             repo_path.mkdir(parents=True, exist_ok=True)
-            subprocess.run(["git", "init", "--bare"], cwd=repo_path, capture_output=True)
+            
+            # Create a non-bare repo first to add content
+            temp_repo = repos_dir / f"{repo_name}_temp"
+            temp_repo.mkdir(parents=True, exist_ok=True)
+            subprocess.run(["git", "init"], cwd=temp_repo, capture_output=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=temp_repo, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Test User"], cwd=temp_repo, capture_output=True)
+            
+            # Add initial commit
+            (temp_repo / "README.md").write_text(f"# {repo_name}")
+            subprocess.run(["git", "add", "."], cwd=temp_repo, capture_output=True)
+            subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=temp_repo, capture_output=True)
+            
+            # Clone to bare repository
+            subprocess.run(["git", "clone", "--bare", str(temp_repo), str(repo_path)], capture_output=True)
+            
+            # Clean up temp repo
+            import shutil
+            shutil.rmtree(temp_repo)
+            
             config_lines.append(f"file://{repo_path}")
         
         config_path = temp_workspace / "workspace.conf"
@@ -396,8 +416,14 @@ class TestScaleAndPerformance:
         
         # Time the switch operation
         start_time = time.time()
-        result = run_workspace("switch")
+        result = run_workspace("switch", check=False)
         duration = time.time() - start_time
+        
+        # Debug output if failed
+        if result.returncode != 0:
+            print(f"Switch failed with return code: {result.returncode}")
+            print(f"STDOUT: {result.stdout}")
+            print(f"STDERR: {result.stderr}")
         
         assert result.returncode == 0
         assert duration < 60  # Should complete within 1 minute

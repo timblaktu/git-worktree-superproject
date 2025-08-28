@@ -6,6 +6,7 @@ set -euo pipefail
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/workspace.conf"
+REPOS_DIR="$SCRIPT_DIR/repos"
 WORKTREES_DIR="$SCRIPT_DIR/worktrees"
 
 # Load repository URLs from config
@@ -28,10 +29,85 @@ get_repo_name() {
     basename "${url%.git}"
 }
 
+# Ensure central repository exists
+ensure_central_repo() {
+    local url="$1"
+    local name="$2"
+    local central_repo="$REPOS_DIR/$name"
+    
+    if [[ ! -d "$central_repo" ]]; then
+        echo "  Initializing central repository: $name"
+        mkdir -p "$REPOS_DIR"
+        if ! git clone "$url" "$central_repo" --quiet; then
+            echo "  Error: Failed to clone $url" >&2
+            return 1
+        fi
+        
+        # Check out a placeholder branch so main branches can be used by worktrees
+        (cd "$central_repo" && git checkout --orphan __workspace_placeholder 2>/dev/null && git reset --hard 2>/dev/null || true)
+    fi
+}
+
+# Create worktree from central repository
+create_worktree() {
+    local name="$1"
+    local branch="$2"
+    local worktree_path="$3"
+    local central_repo="$REPOS_DIR/$name"
+    
+    # Ensure the central repo is up to date (skip for local repos)
+    if (cd "$central_repo" && git remote get-url origin 2>/dev/null | grep -qE "^(https?://|git@|ssh://)"); then
+        (cd "$central_repo" && git fetch --all --quiet 2>/dev/null || true)
+    fi
+    
+    # Check if the branch exists (locally or remotely)
+    local branch_exists=false
+    if (cd "$central_repo" && git show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null); then
+        # Local branch exists
+        branch_exists=true
+    elif (cd "$central_repo" && git show-ref --verify --quiet "refs/remotes/origin/$branch" 2>/dev/null); then
+        # Remote branch exists, create local tracking branch and worktree
+        if (cd "$central_repo" && git worktree add "$worktree_path" -b "$branch" "origin/$branch" --quiet 2>/dev/null); then
+            return 0
+        fi
+    fi
+    
+    if [[ "$branch_exists" == true ]]; then
+        # Try to create worktree with existing local branch
+        if (cd "$central_repo" && git worktree add "$worktree_path" "$branch" --quiet 2>/dev/null); then
+            return 0
+        fi
+    else
+        # Branch doesn't exist, create new branch from the default branch
+        local default_branch
+        default_branch=$(cd "$central_repo" && git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+        
+        if (cd "$central_repo" && git worktree add "$worktree_path" -b "$branch" "$default_branch" --quiet 2>/dev/null); then
+            return 0
+        fi
+    fi
+    
+    # All attempts failed
+    echo "  Error: Failed to create worktree for branch $branch" >&2
+    return 1
+}
+
+# Remove worktree
+remove_worktree() {
+    local name="$1"
+    local worktree_path="$2"
+    local central_repo="$REPOS_DIR/$name"
+    
+    if [[ -d "$central_repo" && -d "$worktree_path" ]]; then
+        (cd "$central_repo" && git worktree remove "$worktree_path" --force 2>/dev/null || true)
+    fi
+}
+
 # Switch to workspace (create if doesn't exist)
 switch_workspace() {
     local branch="${1:-main}"
     local workspace_dir="$WORKTREES_DIR/$branch"
+    local failed=0
     
     echo "Switching to workspace: $branch"
     mkdir -p "$workspace_dir"
@@ -46,16 +122,27 @@ switch_workspace() {
         
         [[ -d "$repo_path" ]] && { echo "  $name exists, skipping"; continue; }
         
-        echo "  Cloning $name..."
-        if git ls-remote --heads "$url" "$repo_branch" 2>/dev/null | grep -q "$repo_branch"; then
-            git clone -b "$repo_branch" "$url" "$repo_path" --quiet
-        else
-            git clone "$url" "$repo_path" --quiet
-            (cd "$repo_path" && git checkout -b "$branch" 2>/dev/null || git checkout "$branch")
+        echo "  Setting up $name... (url=$url, branch=$repo_branch, path=$repo_path)"
+        if ! ensure_central_repo "$url" "$name"; then
+            echo "  Failed to set up central repository for $name" >&2
+            failed=1
+            continue
         fi
+        echo "  Central repo for $name ready, creating worktree..."
+        if ! create_worktree "$name" "$repo_branch" "$repo_path"; then
+            echo "  Failed to create worktree for $name" >&2
+            failed=1
+            continue
+        fi
+        echo "  Worktree for $name created successfully"
         
         [[ -n "$ref" ]] && (cd "$repo_path" && git checkout "$ref" --quiet)
     done < <(load_repos)
+    
+    if [[ $failed -eq 1 ]]; then
+        echo "Workspace setup completed with failures" >&2
+        exit 1
+    fi
     
     echo "Workspace ready: $workspace_dir"
 }
@@ -82,6 +169,10 @@ sync_workspace() {
             echo "  $name is pinned, skipping"
         else
             echo "  Updating $name..."
+            # Update central repository first
+            local central_repo="$REPOS_DIR/$name"
+            [[ -d "$central_repo" ]] && (cd "$central_repo" && git fetch --all --quiet)
+            # Then update the worktree
             (cd "$repo_path" && git pull --ff-only)
         fi
     done < <(load_repos)
@@ -107,7 +198,8 @@ show_status() {
             local name=$(get_repo_name "$url")
             local repo_path="$workspace_dir/$name"
             
-            [[ ! -d "$repo_path/.git" ]] && { printf "  %-20s [missing]\n" "$name:"; continue; }
+            [[ ! -d "$repo_path" ]] && { printf "  %-20s [missing]\n" "$name:"; continue; }
+            [[ ! -d "$repo_path/.git" && ! -f "$repo_path/.git" ]] && { printf "  %-20s [invalid git]\n" "$name:"; continue; }
             
             (
                 cd "$repo_path"
@@ -138,7 +230,7 @@ foreach_repos() {
         local repo_path="$workspace_dir/$name"
         local displaypath="${repo_path#$workspace_dir/}"
         
-        if [[ -d "$repo_path/.git" ]]; then
+        if [[ -d "$repo_path/.git" || -f "$repo_path/.git" ]]; then
             # Export variables like git submodule foreach
             export name="$name"
             export path="$displaypath"
@@ -181,7 +273,18 @@ clean_workspace() {
     echo
     
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm -rf "$workspace_dir"
+        echo "Removing worktrees..."
+        while read -r repo_line; do
+            read -ra parts <<< "$repo_line"
+            local url="${parts[0]}"
+            local name=$(get_repo_name "$url")
+            local repo_path="$workspace_dir/$name"
+            
+            [[ -d "$repo_path" ]] && remove_worktree "$name" "$repo_path"
+        done < <(load_repos)
+        
+        # Remove the workspace directory after all worktrees are removed
+        rmdir "$workspace_dir" 2>/dev/null || rm -rf "$workspace_dir"
         echo "Workspace removed"
     else
         echo "Cancelled"

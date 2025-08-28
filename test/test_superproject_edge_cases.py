@@ -71,75 +71,59 @@ class TestConfigurationValidation:
 class TestMalformedReferences:
     """Test handling of malformed and invalid references in super-project configurations."""
     
-    def test_invalid_commit_sha(self, run_workspace, temp_workspace, base_git_repos, clean_workspace):
-        """Test handling of invalid commit SHA references."""
+    @pytest.mark.parametrize("test_case,repo_configs,test_description", [
+        # Invalid commit SHAs
+        ("invalid_sha", [
+            ("{repo_a} main deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "Invalid 40-char SHA"),
+            ("{repo_b} develop 123456789abcdef", "Invalid short SHA"),
+            ("{repo_c} main", "Valid config for comparison"),
+        ], "Test handling of invalid commit SHA references"),
+        
+        # Non-existent tags
+        ("nonexistent_tags", [
+            ("{repo_a} main v999.999.999", "Non-existent version tag"),
+            ("{repo_b} main nonexistent-tag", "Non-existent named tag"),
+            ("{repo_c} main v1.0.0", "Valid tag for comparison"),
+        ], "Test handling of references to non-existent tags"),
+        
+        # Non-existent branches
+        ("nonexistent_branches", [
+            ("{repo_a} nonexistent-branch", "Non-existent branch"),
+            ("{repo_b} also-nonexistent", "Another non-existent branch"),
+            ("{repo_c} main", "Valid branch for comparison"),
+        ], "Test handling of references to non-existent branches"),
+    ])
+    def test_invalid_references(self, run_workspace, temp_workspace, base_git_repos, 
+                               clean_workspace, test_case, repo_configs, test_description):
+        """Parameterized test for various invalid reference scenarios."""
         config_path = temp_workspace / "workspace.conf"
         
         repo_a, repo_b, repo_c = base_git_repos
         
-        config_content = f"""# Configuration with invalid SHA
-{repo_a[1]} main deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
-{repo_b[1]} develop 123456789abcdef
-{repo_c[1]} main
-"""
+        # Build config content from repo_configs
+        config_lines = [f"# Configuration test: {test_case}"]
+        for config_template, comment in repo_configs:
+            # Replace placeholders with actual repo paths
+            config_line = config_template.format(
+                repo_a=repo_a[1],
+                repo_b=repo_b[1], 
+                repo_c=repo_c[1]
+            )
+            config_lines.append(config_line)
+        
+        config_content = "\n".join(config_lines) + "\n"
         config_path.write_text(config_content)
         
-        # Should handle invalid SHAs gracefully
+        # Should handle invalid references gracefully
         result = run_workspace("switch", check=False)
         
-        # Some repos should still be cloned successfully
-        workspace_dir = Path("worktrees/main")
-        if workspace_dir.exists():
-            successful_repos = [d for d in workspace_dir.iterdir() 
-                              if d.is_dir() and (d / ".git").exists()]
-            # At least the repo without invalid SHA should work
-            assert len(successful_repos) >= 1
-    
-    def test_nonexistent_tags(self, run_workspace, temp_workspace, base_git_repos, clean_workspace):
-        """Test handling of references to non-existent tags."""
-        config_path = temp_workspace / "workspace.conf"
-        
-        repo_a, repo_b, repo_c = base_git_repos
-        
-        config_content = f"""# Configuration with non-existent tags  
-{repo_a[1]} main v999.999.999
-{repo_b[1]} main nonexistent-tag
-{repo_c[1]} main v1.0.0
-"""
-        config_path.write_text(config_content)
-        
-        result = run_workspace("switch", check=False)
-        
-        # Should handle non-existent tags gracefully
-        workspace_dir = Path("worktrees/main")
-        if workspace_dir.exists():
-            repos = [d for d in workspace_dir.iterdir() 
-                    if d.is_dir() and (d / ".git").exists()]
-            # The repo with valid tag should still be cloned
-            assert len(repos) >= 1
-    
-    def test_nonexistent_branches(self, run_workspace, temp_workspace, base_git_repos, clean_workspace):
-        """Test handling of references to non-existent branches."""
-        config_path = temp_workspace / "workspace.conf"
-        
-        repo_a, repo_b, repo_c = base_git_repos
-        
-        config_content = f"""# Configuration with non-existent branches
-{repo_a[1]} nonexistent-branch
-{repo_b[1]} also-nonexistent
-{repo_c[1]} main
-"""
-        config_path.write_text(config_content)
-        
-        result = run_workspace("switch", check=False)
-        
-        # Should handle non-existent branches - may create them or use default
+        # Verify that at least some repos are processed successfully
         workspace_dir = Path("worktrees/main")
         if workspace_dir.exists():
             repos = [d for d in workspace_dir.iterdir() 
-                    if d.is_dir() and (d / ".git").exists()]
-            # At least some repos should be cloned
-            assert len(repos) >= 1
+                    if d.is_dir() and ((d / ".git").exists() or (d / ".git").is_file())]
+            # At least the valid repo should work
+            assert len(repos) >= 1, f"Failed {test_description}: no repos created"
     
     @pytest.mark.parametrize("malformed_config", [
         "invalid-url-format branch ref extra-field",
@@ -217,27 +201,44 @@ class TestRepositoryAccessIssues:
 class TestConcurrentOperations:
     """Test concurrent operations and race conditions in super-project management."""
     
-    def test_concurrent_switch_operations(self, run_workspace, heterogeneous_superproject_config, clean_workspace):
+    def test_concurrent_switch_operations(self, run_workspace, base_git_repos, temp_workspace, clean_workspace):
         """Test concurrent workspace switching."""
         # This test checks basic operation - real concurrency testing would need threading
+        # Note: Git worktrees don't allow the same branch to be checked out in multiple worktrees
+        # So we use a simple config without branch-specific repos
+        
+        # Create a simple config without branch specifications to avoid conflicts
+        config_path = temp_workspace / "workspace.conf"
+        repo_a, repo_b, repo_c = base_git_repos
+        config_content = f"""# Simple config for concurrent testing
+{repo_a[1]}
+{repo_b[1]}
+{repo_c[1]}
+"""
+        config_path.write_text(config_content)
         
         # Switch to multiple workspaces in sequence to test isolation
         result1 = run_workspace("switch", "workspace1")
         assert result1.returncode == 0
         
-        result2 = run_workspace("switch", "workspace2")  
+        # workspace2 uses a different branch to avoid worktree conflicts
+        result2 = run_workspace("switch", "feature-test", check=False)
+        if result2.returncode != 0:
+            print(f"Switch to feature-test failed:")
+            print(f"STDOUT: {result2.stdout}")
+            print(f"STDERR: {result2.stderr}")
         assert result2.returncode == 0
         
         # Both workspaces should exist and be independent
         workspace1_dir = Path("worktrees/workspace1")
-        workspace2_dir = Path("worktrees/workspace2")
+        workspace2_dir = Path("worktrees/feature-test")
         
         assert workspace1_dir.exists()
         assert workspace2_dir.exists()
         
-        # Should have independent repository copies
-        repos1 = [d for d in workspace1_dir.iterdir() if d.is_dir() and (d / ".git").exists()]
-        repos2 = [d for d in workspace2_dir.iterdir() if d.is_dir() and (d / ".git").exists()]
+        # Should have repository worktrees (with .git files pointing to central repos)
+        repos1 = [d for d in workspace1_dir.iterdir() if d.is_dir() and ((d / ".git").exists() or (d / ".git").is_file())]
+        repos2 = [d for d in workspace2_dir.iterdir() if d.is_dir() and ((d / ".git").exists() or (d / ".git").is_file())]
         
         assert len(repos1) >= 2
         assert len(repos2) >= 2
@@ -277,13 +278,17 @@ class TestCorruptedRepositories:
         
         workspace_dir = Path("worktrees/main")
         
-        # Simulate corrupted repository by removing .git directory
+        # Simulate corrupted repository by removing .git file/directory
         repo_dir = workspace_dir / "repo-a"
         if repo_dir.exists():
             import shutil
-            git_dir = repo_dir / ".git"
-            if git_dir.exists():
-                shutil.rmtree(git_dir)
+            import os
+            git_path = repo_dir / ".git"
+            if git_path.exists():
+                if git_path.is_file():
+                    os.remove(git_path)
+                else:
+                    shutil.rmtree(git_path)
         
         # Re-running switch should handle the corrupted state
         result = run_workspace("switch")
