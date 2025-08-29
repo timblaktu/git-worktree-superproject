@@ -166,3 +166,28 @@ class TestConfigurationErrors:
         
         result = run_workspace("switch", check=False)
         assert result.returncode != 0
+    
+    def test_config_missing_final_newline(self, run_workspace, temp_workspace, base_git_repos, clean_workspace):
+        """Test that configuration with missing final newline still processes all repos.
+        
+        This test ensures the workspace script correctly handles configuration files
+        where the last line doesn't end with a newline character, which can cause
+        the `while read` loop to skip the last repository.
+        """
+        config_path = temp_workspace / "workspace.conf"
+        config_content = "\n".join([
+            f"{base_git_repos[0][1]}",
+            f"{base_git_repos[1][1]}",
+            f"{base_git_repos[2][1]}"  # No trailing newline - this is the bug we're testing
+        ])
+        # Write without final newline using write_bytes
+        config_path.write_bytes(config_content.encode())
+        
+        result = run_workspace("switch")
+        assert result.returncode == 0
+        
+        # All three repos should be created, including the last one without newline
+        workspace_dir = Path("worktrees/main")
+        assert (workspace_dir / "repo-a").exists()
+        assert (workspace_dir / "repo-b").exists()
+        assert (workspace_dir / "repo-c").exists(), "Last repository should be created despite missing newline"
