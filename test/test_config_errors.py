@@ -162,14 +162,19 @@ class TestConfigCommandErrors:
         fresh_dir = Path(tempfile.mkdtemp())
         
         try:
+            # Save current dir and change to fresh dir
+            old_cwd = os.getcwd()
+            os.chdir(fresh_dir)
+            
             # Test config operations without git init
-            result = run_workspace(["config", "show"], fresh_dir)
+            result = run_workspace("config", "show", check=False)
             # Should initialize git or fail gracefully
             
-            result = run_workspace(["config", "set", "test", "https://example.com/repo.git"], fresh_dir)
+            result = run_workspace("config", "set", "test", "https://example.com/repo.git", check=False)
             # Should initialize git or fail gracefully
             
         finally:
+            os.chdir(old_cwd)
             shutil.rmtree(fresh_dir)
 
 
@@ -182,8 +187,8 @@ class TestConfigEdgeCases:
         
         # Test URL with special characters
         result = run_workspace(
-            ["config", "set", "test", "https://user:p@ss@example.com/repo.git"],
-            workspace_dir
+            "config", "set", "test", "https://user:p@ss@example.com/repo.git",
+            check=False
         )
         assert result.returncode == 0
         
@@ -220,15 +225,15 @@ class TestConfigEdgeCases:
         
         # Test with Unicode in repository path
         result = run_workspace(
-            ["config", "set", "test", "https://example.com/测试/repo.git"],
-            workspace_dir
+            "config", "set", "test", "https://example.com/测试/repo.git",
+            check=False
         )
         # Should handle Unicode appropriately
         
         # Test with Unicode in branch name
         result = run_workspace(
-            ["config", "set", "test2", "https://example.com/repo.git", "特性/测试"],
-            workspace_dir
+            "config", "set", "test2", "https://example.com/repo.git", "特性/测试",
+            check=False
         )
         # Should handle Unicode branch names
 

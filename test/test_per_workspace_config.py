@@ -13,10 +13,7 @@ class TestGitConfigParsing:
     
     def test_worktree_specific_config(self, temp_workspace_git_enabled, workspace_script, run_workspace, git_repos):
         """Test workspace-specific git config overrides."""
-        # Copy workspace script
-        script_dest = temp_workspace_git_enabled / "workspace"
-        shutil.copy2(workspace_script, script_dest)
-        script_dest.chmod(0o755)
+        # workspace_script is already in the temp directory, no need to copy
         
         # Set default config
         repo_a_path = str(git_repos[0][1])

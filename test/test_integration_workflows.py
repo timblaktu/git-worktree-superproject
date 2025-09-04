@@ -7,6 +7,16 @@ from pathlib import Path
 import pytest
 import subprocess
 import time
+from typing import List, Tuple
+
+
+def setup_workspace_config(workspace_dir: Path, git_repos: List[Tuple[str, Path]]):
+    """Helper to set up workspace.conf with repositories."""
+    config_file = workspace_dir / "workspace.conf"
+    config_lines = []
+    for repo_name, repo_path in git_repos:
+        config_lines.append(f"{repo_path}")
+    config_file.write_text("\n".join(config_lines))
 
 
 class TestDevelopmentWorkflows:
@@ -15,6 +25,7 @@ class TestDevelopmentWorkflows:
     def test_feature_development_workflow(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test complete feature development workflow."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         # Step 1: Create feature workspace
         result = run_workspace("switch", "feature-xyz", check=False)
@@ -39,9 +50,9 @@ class TestDevelopmentWorkflows:
         assert status_result.returncode == 0
         assert "feature-xyz" in status_result.stdout
         
-        # Step 4: Push changes
-        subprocess.run(["git", "push", "origin", "feature-xyz"], cwd=repo_a_path, check=True)
-        subprocess.run(["git", "push", "origin", "feature-xyz"], cwd=repo_b_path, check=True)
+        # Step 4: Would normally push changes here, but test repos are local
+        # subprocess.run(["git", "push", "origin", "feature-xyz"], cwd=repo_a_path, check=True)
+        # subprocess.run(["git", "push", "origin", "feature-xyz"], cwd=repo_b_path, check=True)
         
         # Step 5: Switch to main for hotfix
         result = run_workspace("switch", "main", check=False)
@@ -56,15 +67,15 @@ class TestDevelopmentWorkflows:
         hotfix_file.write_text("Critical fix")
         subprocess.run(["git", "add", "."], cwd=hotfix_file.parent, check=True)
         subprocess.run(["git", "commit", "-m", "Critical hotfix"], cwd=hotfix_file.parent, check=True)
-        subprocess.run(["git", "push", "origin", "main"], cwd=hotfix_file.parent, check=True)
+        # Would normally push hotfix here, but test repos are local
+        # subprocess.run(["git", "push", "origin", "main"], cwd=hotfix_file.parent, check=True)
         
         # Step 7: Switch back to feature and sync
         result = run_workspace("switch", "feature-xyz", check=False)
         assert result.returncode == 0
         
-        # Merge main into feature
-        subprocess.run(["git", "fetch", "origin"], cwd=repo_a_path, check=True)
-        subprocess.run(["git", "merge", "origin/main"], cwd=repo_a_path, check=True)
+        # Merge main into feature (using local branch since we're using worktrees)
+        subprocess.run(["git", "merge", "main"], cwd=repo_a_path, check=True)
         
         # Both feature and hotfix should exist
         assert (repo_a_path / "feature-a.txt").exists()
@@ -73,7 +84,7 @@ class TestDevelopmentWorkflows:
     def test_release_management_workflow(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test release management with version pinning."""
         workspace_dir = temp_workspace_git_enabled
-        
+        setup_workspace_config(workspace_dir, git_repos)        
         # Step 1: Create release branch
         result = run_workspace("switch", "release-1.0", check=False)
         assert result.returncode == 0
@@ -82,20 +93,24 @@ class TestDevelopmentWorkflows:
         repo_a_path = workspace_dir / "worktrees" / "release-1.0" / "repo-a"
         repo_b_path = workspace_dir / "worktrees" / "release-1.0" / "repo-b"
         
-        subprocess.run(["git", "tag", "v1.0.0"], cwd=repo_a_path, check=True)
-        subprocess.run(["git", "tag", "v1.0.0"], cwd=repo_b_path, check=True)
-        subprocess.run(["git", "push", "origin", "v1.0.0"], cwd=repo_a_path, check=True)
-        subprocess.run(["git", "push", "origin", "v1.0.0"], cwd=repo_b_path, check=True)
+        subprocess.run(["git", "tag", "release-1.0.0"], cwd=repo_a_path, check=True)
+        subprocess.run(["git", "tag", "release-1.0.0"], cwd=repo_b_path, check=True)
+        # Would normally push tags here, but test repos are local
+        # subprocess.run(["git", "push", "origin", "release-1.0.0"], cwd=repo_a_path, check=True)
+        # subprocess.run(["git", "push", "origin", "release-1.0.0"], cwd=repo_b_path, check=True)
         
         # Step 3: Configure pinned workspace for production
+        # git_repos is a list of tuples: [(name, path), ...]
+        repo_a_src = git_repos[0][1]  
+        repo_b_src = git_repos[1][1]
         result = run_workspace(
-            ["config", "set", "production", str(git_repos["repo-a"]), "", "v1.0.0"],
-            workspace_dir
+            "config", "set", "production", str(repo_a_src), "", "release-1.0.0",
+            check=False
         )
         assert result.returncode == 0
         
         result = run_workspace(
-            "config", "set", "production", str(git_repos["repo-b"]), "", "v1.0.0",
+            "config", "set", "production", str(repo_b_src), "", "release-1.0.0",
             check=False
         )
         assert result.returncode == 0
@@ -122,7 +137,7 @@ class TestDevelopmentWorkflows:
     def test_parallel_development_workflow(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test parallel development on different features."""
         workspace_dir = temp_workspace_git_enabled
-        
+        setup_workspace_config(workspace_dir, git_repos)        
         # Create multiple feature workspaces
         features = ["feature-auth", "feature-ui", "feature-api"]
         
@@ -160,12 +175,15 @@ class TestDevelopmentWorkflows:
     def test_team_collaboration_workflow(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test team collaboration with shared configurations."""
         workspace_dir = temp_workspace_git_enabled
-        
+        setup_workspace_config(workspace_dir, git_repos)        
         # Developer 1: Set up shared configuration
         shared_config = workspace_dir / "team.conf"
+        # git_repos is a list of tuples: [(name, path), ...]
+        repo_a_path = git_repos[0][1]  # First repo path
+        repo_b_path = git_repos[1][1]  # Second repo path
         shared_config.write_text(f"""
-repo {git_repos["repo-a"]} develop
-repo {git_repos["repo-b"]} develop
+{repo_a_path} develop
+{repo_b_path} develop
 """)
         
         # Import shared configuration
@@ -181,7 +199,8 @@ repo {git_repos["repo-b"]} develop
         dev1_file.write_text("Developer 1 feature")
         subprocess.run(["git", "add", "."], cwd=dev1_file.parent, check=True)
         subprocess.run(["git", "commit", "-m", "Dev1 feature"], cwd=dev1_file.parent, check=True)
-        subprocess.run(["git", "push", "origin", "develop"], cwd=dev1_file.parent, check=True)
+        # Would normally push here, but test repos are local
+        # subprocess.run(["git", "push", "origin", "develop"], cwd=dev1_file.parent, check=True)
         
         # Simulate Developer 2 in different workspace
         dev2_workspace = Path(tempfile.mkdtemp())
@@ -217,7 +236,7 @@ repo {git_repos["repo-b"]} develop
     def test_ci_cd_integration_workflow(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test CI/CD integration patterns."""
         workspace_dir = temp_workspace_git_enabled
-        
+        setup_workspace_config(workspace_dir, git_repos)        
         # CI: Create workspace for testing
         result = run_workspace("switch", "ci-test", check=False)
         assert result.returncode == 0
@@ -225,8 +244,8 @@ repo {git_repos["repo-b"]} develop
         # CI: Run tests in all repositories
         test_results = []
         result = run_workspace(
-            ["foreach", "echo 'Running tests in $name'"],
-            workspace_dir
+            "foreach", "echo 'Running tests in $name'",
+            check=False
         )
         assert result.returncode == 0
         
@@ -280,8 +299,7 @@ class TestComplexScenarios:
 
     def test_large_scale_repository_management(self, temp_workspace_git_enabled, run_workspace):
         """Test managing many repositories efficiently."""
-        workspace_dir = temp_workspace_git_enabled
-        
+        workspace_dir = temp_workspace_git_enabled        
         # Create configuration with many repositories
         many_repos = []
         for i in range(10):
@@ -328,7 +346,7 @@ class TestComplexScenarios:
     def test_mixed_repository_types(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test workspace with mixed repository types (HTTPS, SSH, local)."""
         workspace_dir = temp_workspace_git_enabled
-        
+        setup_workspace_config(workspace_dir, git_repos)        
         # Create local repository
         local_repo = Path(tempfile.mkdtemp()) / "local-repo"
         local_repo.mkdir(parents=True)
@@ -365,7 +383,7 @@ repo file://{local_repo}
     def test_workspace_recovery_from_errors(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test recovery from various error conditions."""
         workspace_dir = temp_workspace_git_enabled
-        
+        setup_workspace_config(workspace_dir, git_repos)        
         # Create workspace
         result = run_workspace("switch", "recovery-test", check=False)
         assert result.returncode == 0
@@ -393,7 +411,7 @@ repo file://{local_repo}
     def test_long_running_workspace_lifecycle(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test long-running workspace with many operations."""
         workspace_dir = temp_workspace_git_enabled
-        
+        setup_workspace_config(workspace_dir, git_repos)        
         # Create long-lived workspace
         result = run_workspace("switch", "long-lived", check=False)
         assert result.returncode == 0
@@ -430,8 +448,7 @@ repo file://{local_repo}
 
     def test_migration_workflow(self, temp_workspace_git_enabled, run_workspace):
         """Test migrating from legacy to new configuration system."""
-        workspace_dir = temp_workspace_git_enabled
-        
+        workspace_dir = temp_workspace_git_enabled        
         # Create legacy workspace.conf
         legacy_config = workspace_dir / "workspace.conf"
         legacy_config.write_text("""

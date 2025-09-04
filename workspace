@@ -412,9 +412,15 @@ config_set() {
     
     # Ensure workspace exists as git worktree
     if [[ ! -e "$workspace_dir/.git" ]]; then
-        echo "Workspace '$workspace' does not exist or is not a git worktree"
-        echo "Create it first with: workspace switch $workspace"
-        exit 1
+        echo "Creating workspace as superproject worktree..."
+        init_superproject
+        mkdir -p "$WORKTREES_DIR"
+        
+        if (cd "$WORKSPACE_ROOT" && git show-ref --verify --quiet "refs/heads/workspace/$workspace" 2>/dev/null); then
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" "workspace/$workspace" 2>/dev/null)
+        else
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" -b "workspace/$workspace" 2>/dev/null)
+        fi
     fi
     
     # Store in git config
