@@ -18,7 +18,8 @@ Git submodules were designed for managing external dependencies with independent
 
 ### The wt-super Solution
 
-- ✅ **Simple configuration** - One `workspace.conf` file defines everything
+- ✅ **Flexible configuration** - Per-workspace or shared configurations
+- ✅ **Version-controlled configs** - Workspace settings tracked in git
 - ✅ **Flexible pinning** - Mix branch-tracking and version-pinned repositories
 - ✅ **Isolated workspaces** - Each workspace is completely independent
 - ✅ **Clean Git history** - No submodule pointer commits
@@ -72,23 +73,64 @@ echo "worktrees/" >> .gitignore
 
 ```
 my-project/
-├── workspace.conf          # Repository configuration (like .gitmodules)
+├── workspace.conf          # Legacy/default repository configuration
 ├── workspace               # Management script  
-├── .gitignore             # Ignore worktrees directory
+├── .gitignore             # Ignore worktrees and repos directories
+├── .git/                  # Superproject git repository
+│   ├── config             # Default workspace configurations
+│   └── worktrees/         # Git worktree metadata
+│       └── feature/
+│           └── config.worktree  # Feature-specific configurations
+├── repos/                 # Central bare repositories (internal cache)
 └── worktrees/             # All workspaces live here
-    ├── main/              # Main branch workspace
+    ├── main/              # Main branch workspace (git worktree)
+    │   ├── .git           # Worktree git file
     │   ├── app/           # First repository
     │   ├── backend/       # Second repository  
     │   └── shared-lib/    # Third repository
-    └── feature-auth/      # Feature branch workspace
+    └── feature-auth/      # Feature branch workspace (git worktree)
+        ├── .git           # Worktree git file
         ├── app/
         ├── backend/
         └── shared-lib/
 ```
 
-## Configuration Format
+## Configuration
 
-The `workspace.conf` file uses a simple space-separated format:
+### Per-Workspace Configuration (NEW)
+
+**wt-super now supports per-workspace repository configurations!** Each workspace can have completely different repository specifications, enabling advanced workflows:
+
+- Different branches for different workspaces
+- Workspace-specific repository subsets
+- Independent version pinning per workspace
+- Configuration tracked in git history
+
+#### Configuration Priority
+
+1. **Workspace-specific** (git worktree config) - Highest priority
+2. **Default** (superproject git config) - Inherited by all workspaces
+3. **Legacy file** (workspace.conf) - For backward compatibility
+
+#### Setting Configurations
+
+```bash
+# Set default repositories for all workspaces
+./workspace config set-default https://github.com/org/app.git main
+
+# Set workspace-specific repository
+./workspace config set feature-x https://github.com/org/app.git feature-branch
+
+# Import from workspace.conf file
+./workspace config import main workspace.conf
+
+# Show configuration for a workspace
+./workspace config show feature-x
+```
+
+### Legacy Configuration Format (workspace.conf)
+
+The `workspace.conf` file uses a simple space-separated format (still supported for backward compatibility):
 
 ```bash
 # workspace.conf
@@ -226,6 +268,29 @@ Remove a workspace and all its repositories.
 - Removes entire workspace directory
 - Cannot be undone - use with caution
 
+### `workspace config <subcommand>`
+Manage per-workspace repository configurations.
+
+```bash
+# Set workspace-specific configuration
+./workspace config set feature-x https://github.com/org/app.git feature-branch v2.0
+
+# Show configuration for a workspace
+./workspace config show feature-x
+
+# Import configuration from file
+./workspace config import main workspace.conf
+
+# Set default configuration for all workspaces
+./workspace config set-default https://github.com/org/shared.git main
+```
+
+**Subcommands:**
+- `set <workspace> <url> [branch] [ref]` - Set repository for specific workspace
+- `show [workspace]` - Display configuration with source indication
+- `import <workspace> [file]` - Import from workspace.conf file
+- `set-default <url> [branch] [ref]` - Set default for all workspaces
+
 ### `workspace help`
 Show help information and usage examples.
 
@@ -289,7 +354,27 @@ Then recreate workspaces:
 ./workspace status  # See all active workspaces
 ```
 
-### 5. **CI/CD Integration**
+### 5. **Per-Workspace Repository Configuration**
+```bash
+# Scenario: Testing a feature that spans specific repos
+# while keeping others on stable branches
+
+# Set up main workspace with stable versions
+./workspace config set main https://github.com/org/app.git main
+./workspace config set main https://github.com/org/backend.git main  
+./workspace config set main https://github.com/org/database.git main v3.0.0
+
+# Set up feature workspace with mixed branches
+./workspace config set feature-api https://github.com/org/app.git main
+./workspace config set feature-api https://github.com/org/backend.git feature-api-v2
+./workspace config set feature-api https://github.com/org/database.git main v3.0.0
+
+# Each workspace maintains its own configuration
+./workspace switch main          # Uses main branches
+./workspace switch feature-api   # Uses feature branch for backend only
+```
+
+### 6. **CI/CD Integration**
 ```bash
 #!/bin/bash
 # ci-build.sh

@@ -9,8 +9,26 @@ CONFIG_FILE="$SCRIPT_DIR/workspace.conf"
 REPOS_DIR="$SCRIPT_DIR/repos"
 WORKTREES_DIR="$SCRIPT_DIR/worktrees"
 
-# Load repository URLs from config
-load_repos() {
+# Initialize superproject if needed
+init_superproject() {
+    if [[ ! -d "$SCRIPT_DIR/.git" ]]; then
+        echo "Initializing workspace superproject..."
+        cd "$SCRIPT_DIR"
+        git init
+        git config extensions.worktreeConfig true
+        echo "/repos/" >> .gitignore
+        echo "/worktrees/" >> .gitignore
+        git add .
+        git commit -m "Initialize workspace superproject"
+        cd - > /dev/null
+    elif [[ "$(cd "$SCRIPT_DIR" && git config extensions.worktreeConfig)" != "true" ]]; then
+        echo "Enabling worktree config..."
+        (cd "$SCRIPT_DIR" && git config extensions.worktreeConfig true)
+    fi
+}
+
+# Load repository URLs from config file (legacy)
+load_repos_from_file() {
     local repos=()
     [[ ! -f "$CONFIG_FILE" ]] && return
     
@@ -31,6 +49,35 @@ load_repos() {
     done <<< "$content"
     
     [[ ${#repos[@]} -gt 0 ]] && printf '%s\n' "${repos[@]}"
+}
+
+# Load repository URLs from multi-source configuration
+load_repos() {
+    local workspace="${1:-main}"
+    
+    # Priority 1: Worktree-specific git config
+    if [[ -e "$WORKTREES_DIR/$workspace/.git" ]]; then
+        local config
+        config=$(cd "$WORKTREES_DIR/$workspace" 2>/dev/null && \
+                 git config --worktree --get-all workspace.repo 2>/dev/null || true)
+        if [[ -n "$config" ]]; then
+            echo "$config"
+            return
+        fi
+    fi
+    
+    # Priority 2: Superproject default config
+    local default_config
+    default_config=$(cd "$SCRIPT_DIR" && git config --get-all workspace.repo 2>/dev/null || true)
+    if [[ -n "$default_config" ]]; then
+        echo "$default_config"
+        return
+    fi
+    
+    # Priority 3: Legacy workspace.conf (for migration)
+    if [[ -f "$CONFIG_FILE" ]]; then
+        load_repos_from_file
+    fi
 }
 
 # Extract repo name from URL
@@ -119,8 +166,25 @@ switch_workspace() {
     local workspace_dir="$WORKTREES_DIR/$branch"
     local failed=0
     
+    # Initialize superproject if needed
+    init_superproject
+    
     echo "Switching to workspace: $branch"
-    mkdir -p "$workspace_dir"
+    
+    # Create superproject worktree (not just directory)
+    if [[ ! -e "$workspace_dir/.git" ]]; then
+        echo "Creating workspace as superproject worktree..."
+        mkdir -p "$WORKTREES_DIR"
+        
+        # Check if workspace branch exists
+        if (cd "$SCRIPT_DIR" && git show-ref --verify --quiet "refs/heads/workspace/$branch" 2>/dev/null); then
+            # Branch exists, just add worktree
+            (cd "$SCRIPT_DIR" && git worktree add "$workspace_dir" "workspace/$branch" 2>/dev/null)
+        else
+            # Create new branch for this workspace
+            (cd "$SCRIPT_DIR" && git worktree add "$workspace_dir" -b "workspace/$branch" 2>/dev/null)
+        fi
+    fi
     
     while read -r repo_line; do
         read -ra parts <<< "$repo_line"
@@ -147,7 +211,7 @@ switch_workspace() {
         echo "  Worktree for $name created successfully"
         
         [[ -n "$ref" ]] && (cd "$repo_path" && git checkout "$ref" --quiet)
-    done < <(load_repos)
+    done < <(load_repos "$branch")
     
     if [[ $failed -eq 1 ]]; then
         echo "Workspace setup completed with failures" >&2
@@ -185,7 +249,7 @@ sync_workspace() {
             # Then update the worktree
             (cd "$repo_path" && git pull --ff-only)
         fi
-    done < <(load_repos)
+    done < <(load_repos "$branch")
 }
 
 # Show status
@@ -217,7 +281,7 @@ show_status() {
                 local status=$(git status --porcelain)
                 printf "  %-20s %-20s %s\n" "$name:" "$branch" "[$([ -n "$status" ] && echo "modified" || echo "clean")]"
             )
-        done < <(load_repos)
+        done < <(load_repos "$workspace")
     done
 }
 
@@ -231,7 +295,8 @@ foreach_repos() {
         shift
     fi
     
-    local workspace_dir="$WORKTREES_DIR/$(basename "$PWD")"
+    local workspace_branch="$(basename "$PWD")"
+    local workspace_dir="$WORKTREES_DIR/$workspace_branch"
     [[ ! -d "$workspace_dir" ]] && { echo "Not in workspace"; exit 1; }
     while read -r repo_line; do
         read -ra parts <<< "$repo_line"
@@ -255,7 +320,7 @@ foreach_repos() {
                 echo
             fi
         fi
-    done < <(load_repos)
+    done < <(load_repos "$workspace_branch")
 }
 
 # List workspaces
@@ -291,14 +356,183 @@ clean_workspace() {
             local repo_path="$workspace_dir/$name"
             
             [[ -d "$repo_path" ]] && remove_worktree "$name" "$repo_path"
-        done < <(load_repos)
+        done < <(load_repos "$branch")
         
-        # Remove the workspace directory after all worktrees are removed
-        rmdir "$workspace_dir" 2>/dev/null || rm -rf "$workspace_dir"
+        # Remove superproject worktree
+        if [[ -e "$workspace_dir/.git" ]]; then
+            (cd "$SCRIPT_DIR" && git worktree remove "$workspace_dir" --force 2>/dev/null || true)
+        else
+            # Legacy: Remove the workspace directory after all worktrees are removed
+            rmdir "$workspace_dir" 2>/dev/null || rm -rf "$workspace_dir"
+        fi
         echo "Workspace removed"
     else
         echo "Cancelled"
     fi
+}
+
+# Config management: Set repository configuration for a workspace
+config_set() {
+    local workspace="${1:-}"
+    local repo_spec="${2:-}"
+    
+    [[ -z "$workspace" || -z "$repo_spec" ]] && { 
+        echo "Usage: workspace config set <workspace> <url> [branch] [ref]" 
+        echo "       workspace config set <workspace> <repo-name> <url> [branch] [ref]"
+        exit 1 
+    }
+    
+    shift 2
+    local remaining_args=("$@")
+    
+    # Parse arguments - could be either:
+    # 1. <url> [branch] [ref]
+    # 2. <repo-name> <url> [branch] [ref]
+    local url branch ref repo_name
+    
+    if [[ "$repo_spec" =~ ^https?:// || "$repo_spec" =~ ^git@ || "$repo_spec" =~ ^ssh:// || "$repo_spec" =~ \.git$ ]]; then
+        # First arg is URL
+        url="$repo_spec"
+        branch="${remaining_args[0]:-main}"
+        ref="${remaining_args[1]:-}"
+        repo_name=$(get_repo_name "$url")
+    else
+        # First arg is repo name
+        repo_name="$repo_spec"
+        url="${remaining_args[0]:-}"
+        branch="${remaining_args[1]:-main}"
+        ref="${remaining_args[2]:-}"
+        
+        [[ -z "$url" ]] && { echo "URL required when specifying repo name"; exit 1; }
+    fi
+    
+    local workspace_dir="$WORKTREES_DIR/$workspace"
+    
+    # Ensure workspace exists as git worktree
+    if [[ ! -e "$workspace_dir/.git" ]]; then
+        echo "Workspace '$workspace' does not exist or is not a git worktree"
+        echo "Create it first with: workspace switch $workspace"
+        exit 1
+    fi
+    
+    # Store in git config
+    local config_value="$url $branch${ref:+ $ref}"
+    (cd "$workspace_dir" && git config --worktree "workspace.repo" "$config_value")
+    
+    echo "Set repository config for workspace '$workspace':"
+    echo "  $repo_name: $config_value"
+}
+
+# Config management: Show workspace configuration
+config_show() {
+    local workspace="${1:-main}"
+    
+    echo "Configuration for workspace: $workspace"
+    echo "======================================="
+    
+    # Check worktree-specific config
+    if [[ -e "$WORKTREES_DIR/$workspace/.git" ]]; then
+        local worktree_config
+        worktree_config=$(cd "$WORKTREES_DIR/$workspace" 2>/dev/null && \
+                         git config --worktree --get-all workspace.repo 2>/dev/null || true)
+        if [[ -n "$worktree_config" ]]; then
+            echo "Workspace-specific repositories:"
+            echo "$worktree_config" | while IFS= read -r line; do
+                echo "  $line"
+            done
+            return
+        fi
+    fi
+    
+    # Check default config
+    local default_config
+    default_config=$(cd "$SCRIPT_DIR" && git config --get-all workspace.repo 2>/dev/null || true)
+    if [[ -n "$default_config" ]]; then
+        echo "Default repositories (inherited):"
+        echo "$default_config" | while IFS= read -r line; do
+            echo "  $line"
+        done
+        return
+    fi
+    
+    # Check legacy file
+    if [[ -f "$CONFIG_FILE" ]]; then
+        echo "Legacy configuration (from workspace.conf):"
+        load_repos_from_file | while IFS= read -r line; do
+            echo "  $line"
+        done
+        return
+    fi
+    
+    echo "No configuration found"
+}
+
+# Config management: Import from workspace.conf
+config_import() {
+    local workspace="${1:-}"
+    local source_file="${2:-$CONFIG_FILE}"
+    
+    [[ -z "$workspace" ]] && { echo "Workspace name required"; exit 1; }
+    [[ ! -f "$source_file" ]] && { echo "Config file not found: $source_file"; exit 1; }
+    
+    local workspace_dir="$WORKTREES_DIR/$workspace"
+    
+    # Ensure workspace exists as git worktree
+    if [[ ! -e "$workspace_dir/.git" ]]; then
+        echo "Creating workspace as superproject worktree..."
+        init_superproject
+        mkdir -p "$WORKTREES_DIR"
+        
+        if (cd "$SCRIPT_DIR" && git show-ref --verify --quiet "refs/heads/workspace/$workspace" 2>/dev/null); then
+            (cd "$SCRIPT_DIR" && git worktree add "$workspace_dir" "workspace/$workspace" 2>/dev/null)
+        else
+            (cd "$SCRIPT_DIR" && git worktree add "$workspace_dir" -b "workspace/$workspace" 2>/dev/null)
+        fi
+    fi
+    
+    echo "Importing configuration to workspace: $workspace"
+    
+    # Clear existing workspace-specific config
+    (cd "$workspace_dir" && git config --worktree --unset-all workspace.repo 2>/dev/null || true)
+    
+    # Import from file
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        
+        (cd "$workspace_dir" && git config --worktree --add "workspace.repo" "$line")
+        echo "  Imported: $line"
+    done < "$source_file"
+    
+    echo "Import complete"
+}
+
+# Config management: Set default configuration
+config_set_default() {
+    local repo_spec="${1:-}"
+    
+    [[ -z "$repo_spec" ]] && { 
+        echo "Usage: workspace config set-default <url> [branch] [ref]" 
+        exit 1 
+    }
+    
+    shift
+    local remaining_args=("$@")
+    
+    # Parse arguments
+    local url="$repo_spec"
+    local branch="${remaining_args[0]:-main}"
+    local ref="${remaining_args[1]:-}"
+    
+    # Initialize if needed
+    init_superproject
+    
+    # Store in superproject git config
+    local config_value="$url $branch${ref:+ $ref}"
+    (cd "$SCRIPT_DIR" && git config --add "workspace.repo" "$config_value")
+    
+    echo "Set default repository config:"
+    echo "  $config_value"
 }
 
 # Main
@@ -309,6 +543,45 @@ case "${1:-help}" in
     foreach) foreach_repos "$@" ;;
     list)   list_workspaces ;;
     clean)  clean_workspace "${2:-}" ;;
+    config)
+        case "${2:-help}" in
+            set) 
+                shift 2
+                config_set "$@" 
+                ;;
+            show)
+                config_show "${3:-main}"
+                ;;
+            import)
+                config_import "${3:-}" "${4:-}"
+                ;;
+            set-default)
+                shift 2
+                config_set_default "$@"
+                ;;
+            help|*)
+                cat << EOF
+Configuration Management
+
+Usage: workspace config <subcommand> [arguments]
+
+Subcommands:
+  set <workspace> <url> [branch] [ref]
+                    Set repository config for a workspace
+  show [workspace]  Show configuration (default: main)
+  import <workspace> [file]
+                    Import from workspace.conf file
+  set-default <url> [branch] [ref]
+                    Set default repository for all workspaces
+
+Configuration Priority:
+  1. Workspace-specific (git worktree config)
+  2. Default (superproject git config)
+  3. Legacy workspace.conf file (migration only)
+EOF
+                ;;
+        esac
+        ;;
     help|*)
         cat << EOF
 Workspace Manager - Submodule-free multi-repo development
@@ -322,9 +595,17 @@ Commands:
   foreach <cmd>     Execute command in all repos
   list              List workspaces
   clean <branch>    Remove workspace
+  config            Manage per-workspace configurations
 
 Configuration:
-  Edit workspace.conf to define repositories
+  Per-workspace: Use 'workspace config' commands
+  Legacy: Edit workspace.conf (for backward compatibility)
+
+Examples:
+  workspace switch feature-x
+  workspace config set feature-x https://github.com/org/repo.git feature-branch
+  workspace config show feature-x
+  workspace config import main workspace.conf
 EOF
         ;;
 esac
