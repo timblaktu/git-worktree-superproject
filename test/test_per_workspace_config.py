@@ -37,10 +37,7 @@ class TestGitConfigParsing:
     
     def test_config_inheritance_chain(self, temp_workspace_git_enabled, workspace_script, run_workspace, git_repos):
         """Test configuration priority: worktree > default > file."""
-        # Copy workspace script
-        script_dest = temp_workspace_git_enabled / "workspace"
-        shutil.copy2(workspace_script, script_dest)
-        script_dest.chmod(0o755)
+        # workspace_script is already copied to the temp directory
         
         repo_a_path = str(git_repos[0][1])
         repo_b_path = str(git_repos[1][1])
@@ -76,10 +73,7 @@ class TestGitConfigParsing:
     
     def test_workspace_isolation(self, temp_workspace_git_enabled, workspace_script, run_workspace, git_repos):
         """Test that workspaces are isolated from each other."""
-        # Copy workspace script
-        script_dest = temp_workspace_git_enabled / "workspace"
-        shutil.copy2(workspace_script, script_dest)
-        script_dest.chmod(0o755)
+        # workspace_script is already copied to the temp directory
         
         repo_a_path = str(git_repos[0][1])
         repo_b_path = str(git_repos[1][1])
@@ -115,10 +109,7 @@ class TestConfigCommands:
     
     def test_config_set_command(self, temp_workspace_git_enabled, workspace_script, run_workspace, git_repos):
         """Test setting configuration via workspace config set."""
-        # Copy workspace script
-        script_dest = temp_workspace_git_enabled / "workspace"
-        shutil.copy2(workspace_script, script_dest)
-        script_dest.chmod(0o755)
+        # workspace_script is already copied to the temp directory
         
         repo_url = str(git_repos[0][1])
         
@@ -138,10 +129,7 @@ class TestConfigCommands:
     
     def test_config_import_command(self, temp_workspace_git_enabled, workspace_script, run_workspace, git_repos):
         """Test importing configuration from workspace.conf."""
-        # Copy workspace script
-        script_dest = temp_workspace_git_enabled / "workspace"
-        shutil.copy2(workspace_script, script_dest)
-        script_dest.chmod(0o755)
+        # workspace_script is already copied to the temp directory
         
         # Create legacy workspace.conf
         config_content = "\n".join([
@@ -170,10 +158,7 @@ class TestConfigCommands:
     
     def test_config_set_default_command(self, temp_workspace_git_enabled, workspace_script, run_workspace, git_repos):
         """Test setting default configuration."""
-        # Copy workspace script
-        script_dest = temp_workspace_git_enabled / "workspace"
-        shutil.copy2(workspace_script, script_dest)
-        script_dest.chmod(0o755)
+        # workspace_script is already copied to the temp directory
         
         repo_url = str(git_repos[0][1])
         
@@ -194,10 +179,7 @@ class TestMigration:
     
     def test_backward_compatibility(self, temp_workspace, workspace_script, run_workspace, workspace_config):
         """Test that existing workspace.conf files still work."""
-        # Copy workspace script
-        script_dest = temp_workspace / "workspace"
-        shutil.copy2(workspace_script, script_dest)
-        script_dest.chmod(0o755)
+        # workspace_script is already copied to the temp directory
         
         # Should work with legacy workspace.conf
         result = run_workspace("switch", "legacy-test")
@@ -212,10 +194,7 @@ class TestMigration:
     
     def test_migration_preserves_functionality(self, temp_workspace_git_enabled, workspace_script, run_workspace, git_repos):
         """Test that migrated configurations work identically."""
-        # Copy workspace script
-        script_dest = temp_workspace_git_enabled / "workspace"
-        shutil.copy2(workspace_script, script_dest)
-        script_dest.chmod(0o755)
+        # workspace_script is already copied to the temp directory
         
         # Create complex workspace.conf
         config_content = f"""# Complex configuration
@@ -257,10 +236,7 @@ class TestWorkspaceAsWorktree:
     
     def test_workspace_is_git_worktree(self, temp_workspace_git_enabled, workspace_script, run_workspace):
         """Test that created workspaces are git worktrees."""
-        # Copy workspace script
-        script_dest = temp_workspace_git_enabled / "workspace"
-        shutil.copy2(workspace_script, script_dest)
-        script_dest.chmod(0o755)
+        # workspace_script is already copied to the temp directory
         
         # Create workspace
         result = run_workspace("switch", "test-worktree")
@@ -278,10 +254,7 @@ class TestWorkspaceAsWorktree:
     
     def test_workspace_branch_creation(self, temp_workspace_git_enabled, workspace_script, run_workspace):
         """Test that workspaces create appropriate branches."""
-        # Copy workspace script
-        script_dest = temp_workspace_git_enabled / "workspace"
-        shutil.copy2(workspace_script, script_dest)
-        script_dest.chmod(0o755)
+        # workspace_script is already copied to the temp directory
         
         # Create multiple workspaces
         run_workspace("switch", "feature-x")
@@ -296,10 +269,7 @@ class TestWorkspaceAsWorktree:
     
     def test_workspace_removal_removes_worktree(self, temp_workspace_git_enabled, workspace_script, run_workspace, git_repos):
         """Test that clean command removes git worktree."""
-        # Copy workspace script
-        script_dest = temp_workspace_git_enabled / "workspace"
-        shutil.copy2(workspace_script, script_dest)
-        script_dest.chmod(0o755)
+        # workspace_script is already copied to the temp directory
         
         # Set a default repo config
         subprocess.run(["git", "config", "--add", "workspace.repo",

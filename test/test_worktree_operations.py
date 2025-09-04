@@ -459,9 +459,9 @@ class TestWorktreeIntegration:
         subprocess.run(["git", "add", "."], cwd=sub_repo, check=True)
         subprocess.run(["git", "commit", "-m", "sub init"], cwd=sub_repo, check=True)
         
-        # Add submodule to parent
+        # Add submodule to parent (allow file protocol for testing)
         subprocess.run(
-            ["git", "submodule", "add", str(sub_repo), "submodule"],
+            ["git", "-c", "protocol.file.allow=always", "submodule", "add", str(sub_repo), "submodule"],
             cwd=parent_repo,
             check=True
         )

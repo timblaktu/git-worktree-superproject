@@ -252,7 +252,7 @@ class TestWorkspaceForeach:
         result = run_workspace("foreach", "pwd", check=False)
         
         assert result.returncode != 0
-        assert "Not in workspace" in result.stdout
+        assert "Not in a workspace" in result.stdout
     
     def test_foreach_with_environment_variables(self, run_workspace, workspace_config, clean_workspace):
         """Test foreach command provides environment variables."""

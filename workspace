@@ -5,8 +5,8 @@ set -euo pipefail
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# The workspace root is where we're running from, not where the script is
-WORKSPACE_ROOT="$(pwd)"
+# The workspace root is where the script is located
+WORKSPACE_ROOT="$SCRIPT_DIR"
 CONFIG_FILE="$WORKSPACE_ROOT/workspace.conf"
 REPOS_DIR="$WORKSPACE_ROOT/repos"
 WORKTREES_DIR="$WORKSPACE_ROOT/worktrees"
@@ -225,7 +225,31 @@ switch_workspace() {
 
 # Sync workspace
 sync_workspace() {
-    local branch="${1:-$(basename "$PWD")}"
+    local branch="${1:-}"
+    
+    # If no branch specified, try to detect current workspace
+    if [[ -z "$branch" ]]; then
+        # Check if we're in a worktree by looking for .git file that points to a worktree
+        if [[ -f "$PWD/.git" ]] && grep -q "^gitdir: .*/\.git/worktrees/" "$PWD/.git" 2>/dev/null; then
+            # Extract workspace name from the gitdir path
+            # gitdir format: /path/to/workspace/.git/worktrees/workspace-name
+            local gitdir=$(grep "^gitdir:" "$PWD/.git" | cut -d: -f2- | xargs)
+            branch=$(basename "$gitdir")
+        else
+            # Try to find workspace by checking parent directories
+            local check_dir="$PWD"
+            while [[ "$check_dir" != "/" ]]; do
+                if [[ -d "$WORKTREES_DIR" ]] && [[ "$check_dir" == "$WORKTREES_DIR"/* ]]; then
+                    branch=$(echo "$check_dir" | sed "s|^$WORKTREES_DIR/||" | cut -d/ -f1)
+                    break
+                fi
+                check_dir=$(dirname "$check_dir")
+            done
+        fi
+        
+        [[ -z "$branch" ]] && { echo "Not in a workspace. Please specify workspace name or cd to a workspace."; exit 1; }
+    fi
+    
     local workspace_dir="$WORKTREES_DIR/$branch"
     
     [[ ! -d "$workspace_dir" ]] && { echo "Workspace not found: $branch"; exit 1; }
@@ -297,9 +321,30 @@ foreach_repos() {
         shift
     fi
     
-    local workspace_branch="$(basename "$PWD")"
+    # Try to detect current workspace  
+    local workspace_branch=""
+    # Check if we're in a worktree by looking for .git file that points to a worktree
+    if [[ -f "$PWD/.git" ]] && grep -q "^gitdir: .*/\.git/worktrees/" "$PWD/.git" 2>/dev/null; then
+        # Extract workspace name from the gitdir path
+        # gitdir format: /path/to/workspace/.git/worktrees/workspace-name
+        local gitdir=$(grep "^gitdir:" "$PWD/.git" | cut -d: -f2- | xargs)
+        workspace_branch=$(basename "$gitdir")
+    else
+        # Try to find workspace by checking parent directories
+        local check_dir="$PWD"
+        while [[ "$check_dir" != "/" ]]; do
+            if [[ -d "$WORKTREES_DIR" ]] && [[ "$check_dir" == "$WORKTREES_DIR"/* ]]; then
+                workspace_branch=$(echo "$check_dir" | sed "s|^$WORKTREES_DIR/||" | cut -d/ -f1)
+                break
+            fi
+            check_dir=$(dirname "$check_dir")
+        done
+    fi
+    
+    [[ -z "$workspace_branch" ]] && { echo "Not in a workspace. Please cd to a workspace directory."; exit 1; }
+    
     local workspace_dir="$WORKTREES_DIR/$workspace_branch"
-    [[ ! -d "$workspace_dir" ]] && { echo "Not in workspace"; exit 1; }
+    [[ ! -d "$workspace_dir" ]] && { echo "Workspace not found: $workspace_branch"; exit 1; }
     while read -r repo_line; do
         read -ra parts <<< "$repo_line"
         local url="${parts[0]}"
