@@ -4,100 +4,189 @@
 
 ---
 
-I need to expand test coverage for the git-worktree-superproject tool that manages multiple repositories using git worktrees instead of submodules. The tool has been recently refactored to support per-workspace repository configurations.
+I need to fix failing tests and ensure comprehensive test coverage for the git-worktree-superproject tool. The test suite has been expanded to 233 tests but 61 are failing due to fixture issues.
 
 **Repository:** `/home/tim/src/git-worktree-superproject`
 **Branch:** `per-workspace-config`
 
 ## Current State
-- Core refactoring is complete and functional
-- Basic test structure exists in `test/` directory
-- New test file `test_per_workspace_config.py` covers new config features
-- The tool now supports both legacy `workspace.conf` and new git-config-based per-workspace configurations
+- Test suite expanded from ~150 to **233 total tests**
+- **580+ test assertions passing**
+- **61 tests failing** due to fixture issue in `temp_workspace`
+- Three new comprehensive test files added:
+  - `test_worktree_operations.py` (17 tests)
+  - `test_config_errors.py` (21 tests) 
+  - `test_integration_workflows.py` (10 tests)
 
-## Key Components to Test
+## Immediate Priority: Fix Failing Tests
 
-### Core Commands (need comprehensive testing):
-1. **`workspace switch [branch]`** - Creates/switches workspaces as git worktrees
-2. **`workspace sync [branch]`** - Updates repositories in workspace
-3. **`workspace status`** - Shows all workspaces and repo states
-4. **`workspace foreach <cmd>`** - Executes commands in all repos
-5. **`workspace list`** - Lists available workspaces
-6. **`workspace clean <branch>`** - Removes workspace and its worktree
+### Known Issue
+The `temp_workspace` fixture in `conftest.py` has a directory creation conflict:
+```python
+FileExistsError: [Errno 17] File exists: '/tmp/.../test_workspace'
+```
 
-### Config Commands (partially tested):
-- `workspace config set <workspace> <url> [branch] [ref]`
-- `workspace config show [workspace]`
-- `workspace config import <workspace> [file]`
-- `workspace config set-default <url> [branch] [ref]`
+### Tests Currently Failing (61 total)
+- All tests using `temp_workspace_git_enabled` fixture
+- Primarily in new test files:
+  - `test_worktree_operations.py` 
+  - `test_config_errors.py`
+  - `test_integration_workflows.py`
 
-## Critical Test Scenarios Needed
+### Fix Required
+Update `conftest.py` fixture to handle existing directories:
+- Add `exist_ok=True` to `mkdir()` calls
+- Or clean up existing directories before creation
+- Ensure proper test isolation
 
-### 1. Workspace Lifecycle Tests
-- Create workspace → add repos → modify → sync → clean
-- Multiple concurrent workspaces
-- Workspace with same name as existing branch
-- Recovery from interrupted operations
+## Second Priority: Validate All Commands Are Tested
 
-### 2. Repository State Management
-- Branch tracking (following workspace branch)
-- Pinned refs (detached HEAD at specific commit/tag)
-- Mixed configurations (some tracking, some pinned)
-- Missing/corrupted repositories
-- Network failures during clone/fetch
+### Core Commands Coverage Status
+| Command | Current Coverage | Tests Location | Validation Needed |
+|---------|-----------------|----------------|-------------------|
+| **switch** | Good | Multiple files | Verify worktree creation |
+| **sync** | Good | Multiple files | Test pinned repo skipping |
+| **status** | Excellent | test_workspace.py | Confirm output format |
+| **foreach** | Excellent | test_workspace.py | Test error propagation |
+| **list** | Complete | test_workspace.py | ✅ Done |
+| **clean** | Good | Multiple files | Test worktree removal |
+| **help** | Basic | test_workspace.py | Verify all commands listed |
 
-### 3. Configuration Inheritance
-- Workspace-specific overrides default
-- Default overrides legacy file
-- Empty configurations at various levels
-- Migration from workspace.conf to git config
-- Config conflicts and resolution
+### Config Commands Coverage Status
+| Command | Current Coverage | Tests Location | Validation Needed |
+|---------|-----------------|----------------|-------------------|
+| **config set** | Tested | test_config_errors.py | Test URL validation |
+| **config show** | Tested | test_config_errors.py | Test inheritance |
+| **config import** | Tested | test_config_errors.py | Test file parsing |
+| **config set-default** | Tested | test_config_errors.py | Test global config |
+| **config help** | Tested | test_config_errors.py | ✅ Done |
 
-### 4. Edge Cases
-- Repositories with spaces in names/paths
-- Very large repositories
-- Submodules within managed repositories
-- Symbolic links in repository paths
-- Permission issues
-- Concurrent operations on same workspace
+## Third Priority: Ensure Critical Workflows Pass
 
-### 5. Integration Workflows
-From README.md use cases:
-- Feature development across multiple repos
-- Release management with version pinning
-- Parallel development on different features
-- CI/CD integration scenarios
-- Team collaboration with different workspace configs
+### Essential Workflows to Validate
+1. **Basic Development Flow**
+   - Create workspace → Make changes → Sync → Switch → Clean
+   - Must work with both worktree and config systems
 
-## Test Framework Setup
-- Using pytest with fixtures in `conftest.py`
-- Class-scoped fixtures for expensive setup (base_git_repos)
-- Test parallelization with pytest-xdist
-- Existing fixtures: temp_workspace, git_repos, run_workspace
+2. **Multi-Repository Coordination**
+   - All repos switch branches together
+   - Pinned repos remain fixed during sync
+   - Status shows accurate state
 
-## Documentation References
-- **README.md** - Full command documentation and use cases
-- **PER-WORKSPACE-CONFIG-DESIGN.md** - Architecture and design decisions
-- **MIGRATION-GUIDE.md** - Migration scenarios to test
+3. **Configuration Precedence**
+   - Workspace-specific > Default > Legacy file
+   - Proper inheritance and override behavior
 
-## Testing Goals
-1. Achieve >90% code coverage for workspace script
-2. Validate all documented use cases work correctly
-3. Ensure backward compatibility with workspace.conf
-4. Verify per-workspace configurations are isolated
-5. Test error handling and recovery scenarios
-6. Validate CI/CD integration patterns
+4. **Error Recovery**
+   - Network failures don't corrupt state
+   - Partial operations can be resumed
+   - Clean removes worktrees properly
 
-## First Priority
-Focus on testing the core workspace commands (switch, sync, status, foreach, clean) as these are essential for basic functionality and most likely to be used immediately. The config commands have basic coverage but the core commands need comprehensive testing.
+## Test Execution Strategy
 
-Please analyze the current test coverage, identify gaps, and implement comprehensive tests for the workspace commands following the patterns established in the existing test files.
+### Step 1: Fix Fixtures
+```bash
+# Edit conftest.py to fix temp_workspace fixture
+# Run tests to verify fixes
+nix develop -c pytest -v --tb=short
+```
+
+### Step 2: Run Test Categories
+```bash
+# Core commands
+nix develop -c pytest test/test_workspace*.py -v
+
+# Config commands  
+nix develop -c pytest test/test_config*.py -v
+
+# Integration workflows
+nix develop -c pytest test/test_integration_workflows.py -v
+
+# Worktree operations
+nix develop -c pytest test/test_worktree_operations.py -v
+```
+
+### Step 3: Coverage Analysis
+```bash
+# Generate coverage report
+nix develop -c pytest --cov=workspace --cov-report=term-missing
+
+# Identify untested code paths
+# Add targeted tests for gaps
+```
+
+## Expected Outcomes
+
+### Success Criteria
+- ✅ All 233 tests passing
+- ✅ No fixture-related failures
+- ✅ Coverage >85% for workspace script
+- ✅ All documented commands have tests
+- ✅ Critical workflows validated
+
+### Test Report Should Show
+- **0 failed, 233+ passed**
+- Execution time under 2 minutes
+- Clean test output with no warnings
+- Coverage report showing high percentages
+
+## Files to Focus On
+
+### Primary Files
+- `test/conftest.py` - **Fix fixture issues here first**
+- `workspace` - Main script being tested
+- `test/test_worktree_operations.py` - New worktree tests
+- `test/test_config_errors.py` - Config error handling
+- `test/test_integration_workflows.py` - Complex workflows
+
+### Supporting Files
+- `TEST-COVERAGE-SUMMARY.md` - Current test achievements
+- `README.md` - Command documentation
+- `PER-WORKSPACE-CONFIG-DESIGN.md` - Architecture reference
+
+## Debugging Tips
+
+### For Fixture Issues
+- Check if directories are being cleaned up properly
+- Verify pytest's tmp_path handling
+- Look for race conditions in parallel test execution
+- Consider using pytest's built-in tmp_path fixture
+
+### For Test Failures
+- Use `-v` for verbose output
+- Use `--tb=short` for concise tracebacks  
+- Use `-k test_name` to run specific tests
+- Use `--lf` to run last failed tests
+
+## Final Validation
+
+Once all tests pass, run the full suite with coverage:
+```bash
+# Full test suite with coverage
+nix develop -c pytest --cov=workspace --cov-report=html --cov-report=term
+
+# Parallel execution for speed
+nix develop -c pytest -n auto
+
+# Verify no regressions
+git status  # Should show no unexpected changes
+```
+
+The goal is to achieve a fully passing test suite that comprehensively validates all workspace commands and workflows, providing confidence in the tool's reliability and correctness.
 
 ---
 
-## Additional Context Files to Review:
-- `workspace` - The main script to test
-- `test/conftest.py` - Test fixtures and utilities
-- `test/test_workspace.py` - Existing workspace tests (may need updates)
-- `test/test_config.py` - Configuration parsing tests
-- `test/test_per_workspace_config.py` - New config system tests
+## Quick Start Commands
+```bash
+cd /home/tim/src/git-worktree-superproject
+git checkout per-workspace-config
+
+# Fix fixtures first
+$EDITOR test/conftest.py
+
+# Run all tests
+nix develop -c pytest -v
+
+# Run with coverage
+nix develop -c pytest --cov=workspace --cov-report=term-missing
+```
