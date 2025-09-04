@@ -5,15 +5,17 @@ set -euo pipefail
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/workspace.conf"
-REPOS_DIR="$SCRIPT_DIR/repos"
-WORKTREES_DIR="$SCRIPT_DIR/worktrees"
+# The workspace root is where we're running from, not where the script is
+WORKSPACE_ROOT="$(pwd)"
+CONFIG_FILE="$WORKSPACE_ROOT/workspace.conf"
+REPOS_DIR="$WORKSPACE_ROOT/repos"
+WORKTREES_DIR="$WORKSPACE_ROOT/worktrees"
 
 # Initialize superproject if needed
 init_superproject() {
-    if [[ ! -d "$SCRIPT_DIR/.git" ]]; then
+    if [[ ! -d "$WORKSPACE_ROOT/.git" ]]; then
         echo "Initializing workspace superproject..."
-        cd "$SCRIPT_DIR"
+        cd "$WORKSPACE_ROOT"
         git init
         git config extensions.worktreeConfig true
         echo "/repos/" >> .gitignore
@@ -21,9 +23,9 @@ init_superproject() {
         git add .
         git commit -m "Initialize workspace superproject"
         cd - > /dev/null
-    elif [[ "$(cd "$SCRIPT_DIR" && git config extensions.worktreeConfig)" != "true" ]]; then
+    elif [[ "$(cd "$WORKSPACE_ROOT" && git config extensions.worktreeConfig)" != "true" ]]; then
         echo "Enabling worktree config..."
-        (cd "$SCRIPT_DIR" && git config extensions.worktreeConfig true)
+        (cd "$WORKSPACE_ROOT" && git config extensions.worktreeConfig true)
     fi
 }
 
@@ -68,7 +70,7 @@ load_repos() {
     
     # Priority 2: Superproject default config
     local default_config
-    default_config=$(cd "$SCRIPT_DIR" && git config --get-all workspace.repo 2>/dev/null || true)
+    default_config=$(cd "$WORKSPACE_ROOT" && git config --get-all workspace.repo 2>/dev/null || true)
     if [[ -n "$default_config" ]]; then
         echo "$default_config"
         return
@@ -177,12 +179,12 @@ switch_workspace() {
         mkdir -p "$WORKTREES_DIR"
         
         # Check if workspace branch exists
-        if (cd "$SCRIPT_DIR" && git show-ref --verify --quiet "refs/heads/workspace/$branch" 2>/dev/null); then
+        if (cd "$WORKSPACE_ROOT" && git show-ref --verify --quiet "refs/heads/workspace/$branch" 2>/dev/null); then
             # Branch exists, just add worktree
-            (cd "$SCRIPT_DIR" && git worktree add "$workspace_dir" "workspace/$branch" 2>/dev/null)
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" "workspace/$branch" 2>/dev/null)
         else
             # Create new branch for this workspace
-            (cd "$SCRIPT_DIR" && git worktree add "$workspace_dir" -b "workspace/$branch" 2>/dev/null)
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" -b "workspace/$branch" 2>/dev/null)
         fi
     fi
     
@@ -360,7 +362,7 @@ clean_workspace() {
         
         # Remove superproject worktree
         if [[ -e "$workspace_dir/.git" ]]; then
-            (cd "$SCRIPT_DIR" && git worktree remove "$workspace_dir" --force 2>/dev/null || true)
+            (cd "$WORKSPACE_ROOT" && git worktree remove "$workspace_dir" --force 2>/dev/null || true)
         else
             # Legacy: Remove the workspace directory after all worktrees are removed
             rmdir "$workspace_dir" 2>/dev/null || rm -rf "$workspace_dir"
@@ -446,7 +448,7 @@ config_show() {
     
     # Check default config
     local default_config
-    default_config=$(cd "$SCRIPT_DIR" && git config --get-all workspace.repo 2>/dev/null || true)
+    default_config=$(cd "$WORKSPACE_ROOT" && git config --get-all workspace.repo 2>/dev/null || true)
     if [[ -n "$default_config" ]]; then
         echo "Default repositories (inherited):"
         echo "$default_config" | while IFS= read -r line; do
@@ -483,10 +485,10 @@ config_import() {
         init_superproject
         mkdir -p "$WORKTREES_DIR"
         
-        if (cd "$SCRIPT_DIR" && git show-ref --verify --quiet "refs/heads/workspace/$workspace" 2>/dev/null); then
-            (cd "$SCRIPT_DIR" && git worktree add "$workspace_dir" "workspace/$workspace" 2>/dev/null)
+        if (cd "$WORKSPACE_ROOT" && git show-ref --verify --quiet "refs/heads/workspace/$workspace" 2>/dev/null); then
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" "workspace/$workspace" 2>/dev/null)
         else
-            (cd "$SCRIPT_DIR" && git worktree add "$workspace_dir" -b "workspace/$workspace" 2>/dev/null)
+            (cd "$WORKSPACE_ROOT" && git worktree add "$workspace_dir" -b "workspace/$workspace" 2>/dev/null)
         fi
     fi
     
@@ -529,7 +531,7 @@ config_set_default() {
     
     # Store in superproject git config
     local config_value="$url $branch${ref:+ $ref}"
-    (cd "$SCRIPT_DIR" && git config --add "workspace.repo" "$config_value")
+    (cd "$WORKSPACE_ROOT" && git config --add "workspace.repo" "$config_value")
     
     echo "Set default repository config:"
     echo "  $config_value"
@@ -544,7 +546,12 @@ case "${1:-help}" in
     list)   list_workspaces ;;
     clean)  clean_workspace "${2:-}" ;;
     config)
-        case "${2:-help}" in
+        case "${2:-}" in
+            "")
+                echo "Error: config command requires a subcommand" >&2
+                echo "Run 'workspace config help' for usage information" >&2
+                exit 1
+                ;;
             set) 
                 shift 2
                 config_set "$@" 
@@ -559,7 +566,7 @@ case "${1:-help}" in
                 shift 2
                 config_set_default "$@"
                 ;;
-            help|*)
+            help)
                 cat << EOF
 Configuration Management
 
@@ -579,6 +586,11 @@ Configuration Priority:
   2. Default (superproject git config)
   3. Legacy workspace.conf file (migration only)
 EOF
+                ;;
+            *)
+                echo "Error: Unknown config subcommand: ${2}" >&2
+                echo "Run 'workspace config help' for usage information" >&2
+                exit 1
                 ;;
         esac
         ;;

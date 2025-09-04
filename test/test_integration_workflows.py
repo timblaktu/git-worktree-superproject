@@ -17,7 +17,7 @@ class TestDevelopmentWorkflows:
         workspace_dir = temp_workspace_git_enabled
         
         # Step 1: Create feature workspace
-        result = run_workspace(["switch", "feature-xyz"], workspace_dir)
+        result = run_workspace("switch", "feature-xyz", check=False)
         assert result.returncode == 0
         
         # Step 2: Make changes in multiple repos
@@ -35,7 +35,7 @@ class TestDevelopmentWorkflows:
         subprocess.run(["git", "commit", "-m", "Add feature B"], cwd=repo_b_path, check=True)
         
         # Step 3: Check status
-        status_result = run_workspace(["status"], workspace_dir)
+        status_result = run_workspace("status", check=False)
         assert status_result.returncode == 0
         assert "feature-xyz" in status_result.stdout
         
@@ -44,7 +44,7 @@ class TestDevelopmentWorkflows:
         subprocess.run(["git", "push", "origin", "feature-xyz"], cwd=repo_b_path, check=True)
         
         # Step 5: Switch to main for hotfix
-        result = run_workspace(["switch", "main"], workspace_dir)
+        result = run_workspace("switch", "main", check=False)
         assert result.returncode == 0
         
         # Verify feature files don't exist in main
@@ -59,7 +59,7 @@ class TestDevelopmentWorkflows:
         subprocess.run(["git", "push", "origin", "main"], cwd=hotfix_file.parent, check=True)
         
         # Step 7: Switch back to feature and sync
-        result = run_workspace(["switch", "feature-xyz"], workspace_dir)
+        result = run_workspace("switch", "feature-xyz", check=False)
         assert result.returncode == 0
         
         # Merge main into feature
@@ -75,7 +75,7 @@ class TestDevelopmentWorkflows:
         workspace_dir = temp_workspace_git_enabled
         
         # Step 1: Create release branch
-        result = run_workspace(["switch", "release-1.0"], workspace_dir)
+        result = run_workspace("switch", "release-1.0", check=False)
         assert result.returncode == 0
         
         # Step 2: Tag repositories
@@ -95,13 +95,13 @@ class TestDevelopmentWorkflows:
         assert result.returncode == 0
         
         result = run_workspace(
-            ["config", "set", "production", str(git_repos["repo-b"]), "", "v1.0.0"],
-            workspace_dir
+            "config", "set", "production", str(git_repos["repo-b"]), "", "v1.0.0",
+            check=False
         )
         assert result.returncode == 0
         
         # Step 4: Create production workspace with pinned versions
-        result = run_workspace(["switch", "production"], workspace_dir)
+        result = run_workspace("switch", "production", check=False)
         assert result.returncode == 0
         
         # Step 5: Verify repos are at tagged versions
@@ -115,7 +115,7 @@ class TestDevelopmentWorkflows:
         assert "v1.0.0" in tag_result.stdout
         
         # Step 6: Try to sync (should skip pinned repos)
-        sync_result = run_workspace(["sync", "production"], workspace_dir)
+        sync_result = run_workspace("sync", "production", check=False)
         assert sync_result.returncode == 0
         # Should indicate pinned repos were skipped
 
@@ -127,7 +127,7 @@ class TestDevelopmentWorkflows:
         features = ["feature-auth", "feature-ui", "feature-api"]
         
         for feature in features:
-            result = run_workspace(["switch", feature], workspace_dir)
+            result = run_workspace("switch", feature, check=False)
             assert result.returncode == 0
             
             # Make unique changes in each workspace
@@ -138,20 +138,20 @@ class TestDevelopmentWorkflows:
             subprocess.run(["git", "commit", "-m", f"Implement {feature}"], cwd=repo_path, check=True)
         
         # List all workspaces
-        list_result = run_workspace(["list"], workspace_dir)
+        list_result = run_workspace("list", check=False)
         assert list_result.returncode == 0
         for feature in features:
             assert feature in list_result.stdout
         
         # Check status of all workspaces
-        status_result = run_workspace(["status"], workspace_dir)
+        status_result = run_workspace("status", check=False)
         assert status_result.returncode == 0
         # Should show all workspaces and their states
         
         # Switch between workspaces rapidly
         for _ in range(2):
             for feature in features:
-                result = run_workspace(["switch", feature], workspace_dir)
+                result = run_workspace("switch", feature, check=False)
                 assert result.returncode == 0
                 # Verify correct feature file exists
                 feature_file = workspace_dir / "worktrees" / feature / "repo-a" / f"{feature}.txt"
@@ -169,11 +169,11 @@ repo {git_repos["repo-b"]} develop
 """)
         
         # Import shared configuration
-        result = run_workspace(["config", "import", "team-dev", str(shared_config)], workspace_dir)
+        result = run_workspace("config", "import", "team-dev", str(shared_config), check=False)
         assert result.returncode == 0
         
         # Developer 1: Create workspace
-        result = run_workspace(["switch", "team-dev"], workspace_dir)
+        result = run_workspace("switch", "team-dev", check=False)
         assert result.returncode == 0
         
         # Developer 1: Make changes
@@ -219,7 +219,7 @@ repo {git_repos["repo-b"]} develop
         workspace_dir = temp_workspace_git_enabled
         
         # CI: Create workspace for testing
-        result = run_workspace(["switch", "ci-test"], workspace_dir)
+        result = run_workspace("switch", "ci-test", check=False)
         assert result.returncode == 0
         
         # CI: Run tests in all repositories
@@ -257,11 +257,11 @@ repo {git_repos["repo-b"]} @pinned {commit_b}
 """)
         
         # Import deployment configuration
-        result = run_workspace(["config", "import", "deploy", str(deploy_config)], workspace_dir)
+        result = run_workspace("config", "import", "deploy", str(deploy_config), check=False)
         assert result.returncode == 0
         
         # Create deployment workspace
-        result = run_workspace(["switch", "deploy"], workspace_dir)
+        result = run_workspace("switch", "deploy", check=False)
         assert result.returncode == 0
         
         # Verify exact commits are checked out
@@ -299,12 +299,12 @@ class TestComplexScenarios:
         config_file.write_text("\n".join(config_lines))
         
         # Import configuration
-        result = run_workspace(["config", "import", "large-scale", str(config_file)], workspace_dir)
+        result = run_workspace("config", "import", "large-scale", str(config_file), check=False)
         assert result.returncode == 0
         
         # Create workspace (should handle many repos efficiently)
         start_time = time.time()
-        result = run_workspace(["switch", "large-scale"], workspace_dir)
+        result = run_workspace("switch", "large-scale", check=False)
         creation_time = time.time() - start_time
         assert result.returncode == 0
         
@@ -351,11 +351,11 @@ repo file://{local_repo}
 """)
         
         # Import configuration
-        result = run_workspace(["config", "import", "mixed", str(config_file)], workspace_dir)
+        result = run_workspace("config", "import", "mixed", str(config_file), check=False)
         assert result.returncode == 0
         
         # Create workspace with mixed types
-        result = run_workspace(["switch", "mixed"], workspace_dir)
+        result = run_workspace("switch", "mixed", check=False)
         assert result.returncode == 0
         
         # Verify all repository types work
@@ -367,7 +367,7 @@ repo file://{local_repo}
         workspace_dir = temp_workspace_git_enabled
         
         # Create workspace
-        result = run_workspace(["switch", "recovery-test"], workspace_dir)
+        result = run_workspace("switch", "recovery-test", check=False)
         assert result.returncode == 0
         
         # Simulate partial failure by corrupting one worktree
@@ -377,14 +377,14 @@ repo file://{local_repo}
             git_file.write_text("corrupted")
         
         # Try to sync (should handle corrupted worktree)
-        sync_result = run_workspace(["sync", "recovery-test"], workspace_dir)
+        sync_result = run_workspace("sync", "recovery-test", check=False)
         # Should complete with error for corrupted repo
         
         # Try to clean and recreate
-        clean_result = run_workspace(["clean", "recovery-test"], workspace_dir, input="y\n")
+        clean_result = run_workspace("clean", "recovery-test", check=False, input="y\n")
         
         # Recreate workspace
-        result = run_workspace(["switch", "recovery-test"], workspace_dir)
+        result = run_workspace("switch", "recovery-test", check=False)
         assert result.returncode == 0
         
         # Should be working again
@@ -395,7 +395,7 @@ repo file://{local_repo}
         workspace_dir = temp_workspace_git_enabled
         
         # Create long-lived workspace
-        result = run_workspace(["switch", "long-lived"], workspace_dir)
+        result = run_workspace("switch", "long-lived", check=False)
         assert result.returncode == 0
         
         # Simulate many development cycles
@@ -408,11 +408,11 @@ repo file://{local_repo}
             subprocess.run(["git", "commit", "-m", f"Cycle {cycle}"], cwd=repo_path, check=True)
             
             # Sync
-            result = run_workspace(["sync", "long-lived"], workspace_dir)
+            result = run_workspace("sync", "long-lived", check=False)
             assert result.returncode == 0
             
             # Check status
-            result = run_workspace(["status"], workspace_dir)
+            result = run_workspace("status", check=False)
             assert result.returncode == 0
         
         # Verify workspace is still healthy after many operations
@@ -442,22 +442,22 @@ repo https://example.com/legacy3.git @pinned v1.0
 """)
         
         # Create workspace using legacy config
-        result = run_workspace(["switch", "legacy-workspace"], workspace_dir)
+        result = run_workspace("switch", "legacy-workspace", check=False)
         # Should work with legacy config
         
         # Migrate to new config system
-        result = run_workspace(["config", "import", "migrated"], workspace_dir)
+        result = run_workspace("config", "import", "migrated", check=False)
         assert result.returncode == 0
         
         # Verify migration
-        show_result = run_workspace(["config", "show", "migrated"], workspace_dir)
+        show_result = run_workspace("config", "show", "migrated", check=False)
         assert result.returncode == 0
         
         # Create new workspace with migrated config
-        result = run_workspace(["switch", "migrated"], workspace_dir)
+        result = run_workspace("switch", "migrated", check=False)
         # Should use new config system
         
         # Both workspaces should coexist
-        list_result = run_workspace(["list"], workspace_dir)
+        list_result = run_workspace("list", check=False)
         assert "legacy-workspace" in list_result.stdout
         assert "migrated" in list_result.stdout

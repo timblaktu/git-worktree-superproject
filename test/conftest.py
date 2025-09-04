@@ -18,7 +18,7 @@ import pytest
 def temp_workspace(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary workspace directory for testing."""
     workspace_dir = tmp_path / "test_workspace"
-    workspace_dir.mkdir()
+    workspace_dir.mkdir(exist_ok=True)
     
     # Save current directory
     original_dir = os.getcwd()
@@ -330,7 +330,7 @@ def large_superproject_config(temp_workspace: Path, base_git_repos: List[Tuple[s
 def temp_workspace_git_enabled(tmp_path: Path) -> Generator[Path, None, None]:
     """Create temp workspace with git initialization for per-workspace config tests."""
     workspace_dir = tmp_path / "test_workspace"
-    workspace_dir.mkdir()
+    workspace_dir.mkdir(exist_ok=True)
     
     # Save current directory
     original_dir = os.getcwd()

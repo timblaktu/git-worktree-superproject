@@ -9,15 +9,32 @@ import subprocess
 import json
 
 
+def setup_workspace_config(workspace_dir, git_repos):
+    """Helper to set up workspace configuration for worktree tests."""
+    # Set up repository configuration
+    config_file = workspace_dir / "workspace.conf"
+    config_lines = []
+    for repo_name, repo_path in git_repos:
+        config_lines.append(f"{repo_path}")
+    config_file.write_text("\n".join(config_lines) + "\n")
+    
+    # Copy workspace script to test directory
+    script_source = Path(__file__).parent.parent / "workspace"
+    script_dest = workspace_dir / "workspace"
+    shutil.copy2(script_source, script_dest)
+    script_dest.chmod(0o755)
+
+
 class TestWorktreeLifecycle:
     """Test complete worktree lifecycle from creation to removal."""
 
     def test_worktree_creation_and_removal(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test creating and removing worktrees properly."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         # Create initial workspace
-        result = run_workspace(["switch", "feature-1"], workspace_dir)
+        result = run_workspace("switch", "feature-1", check=False)
         assert result.returncode == 0
         assert (workspace_dir / "worktrees" / "feature-1").exists()
         
@@ -31,7 +48,7 @@ class TestWorktreeLifecycle:
         assert "/repos/repo-a/" in git_content
         
         # Clean the workspace
-        result = run_workspace(["clean", "feature-1"], workspace_dir, input="y\n")
+        result = run_workspace("clean", "feature-1", check=False, input="y\n")
         assert result.returncode == 0
         assert not (workspace_dir / "worktrees" / "feature-1").exists()
         
@@ -48,13 +65,14 @@ class TestWorktreeLifecycle:
     def test_multiple_worktrees_same_repo(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test creating multiple worktrees from the same central repository."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         # Create first workspace
-        result1 = run_workspace(["switch", "feature-1"], workspace_dir)
+        result1 = run_workspace("switch", "feature-1", check=False)
         assert result1.returncode == 0
         
         # Create second workspace
-        result2 = run_workspace(["switch", "feature-2"], workspace_dir)
+        result2 = run_workspace("switch", "feature-2", check=False)
         assert result2.returncode == 0
         
         # Both should exist
@@ -114,9 +132,10 @@ class TestWorktreeLifecycle:
     def test_worktree_branch_conflicts(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test handling branch conflicts when creating worktrees."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         # Create workspace with branch 'main'
-        result = run_workspace(["switch", "main"], workspace_dir)
+        result = run_workspace("switch", "main", check=False)
         assert result.returncode == 0
         
         # Try to create another worktree with same branch (should fail)
@@ -137,9 +156,10 @@ class TestWorktreeLifecycle:
     def test_orphaned_worktree_cleanup(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test cleaning up orphaned worktrees."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         # Create workspace
-        result = run_workspace(["switch", "feature-orphan"], workspace_dir)
+        result = run_workspace("switch", "feature-orphan", check=False)
         assert result.returncode == 0
         
         # Manually delete worktree directory (simulating corruption)
@@ -177,9 +197,10 @@ class TestWorktreeLifecycle:
     def test_worktree_with_uncommitted_changes(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test worktree operations with uncommitted changes."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         # Create workspace
-        result = run_workspace(["switch", "feature-dirty"], workspace_dir)
+        result = run_workspace("switch", "feature-dirty", check=False)
         assert result.returncode == 0
         
         # Make uncommitted changes
@@ -187,12 +208,12 @@ class TestWorktreeLifecycle:
         test_file.write_text("uncommitted content")
         
         # Status should show uncommitted changes
-        status_result = run_workspace(["status"], workspace_dir)
+        status_result = run_workspace("status", check=False)
         assert status_result.returncode == 0
         # The status should indicate the dirty state
         
         # Try to clean (should warn about uncommitted changes)
-        clean_result = run_workspace(["clean", "feature-dirty"], workspace_dir, input="y\n")
+        clean_result = run_workspace("clean", "feature-dirty", check=False, input="y\n")
         # Clean might succeed but should handle the uncommitted changes gracefully
 
 
@@ -202,9 +223,10 @@ class TestCentralRepositoryManagement:
     def test_ensure_central_repo_creation(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test that central repositories are created correctly."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         # Create workspace (which should create central repos)
-        result = run_workspace(["switch", "test-central"], workspace_dir)
+        result = run_workspace("switch", "test-central", check=False)
         assert result.returncode == 0
         
         # Verify central repositories exist
@@ -218,9 +240,10 @@ class TestCentralRepositoryManagement:
     def test_central_repo_remote_tracking(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test that central repos properly track remotes."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         # Create workspace
-        result = run_workspace(["switch", "test-remotes"], workspace_dir)
+        result = run_workspace("switch", "test-remotes", check=False)
         assert result.returncode == 0
         
         # Check remote configuration in central repo
@@ -232,24 +255,28 @@ class TestCentralRepositoryManagement:
             text=True
         )
         assert "origin" in remote_result.stdout
-        assert str(git_repos["repo-a"]) in remote_result.stdout
+        # Find repo-a path from git_repos list
+        repo_a_path = next(path for name, path in git_repos if name == "repo-a")
+        assert str(repo_a_path) in remote_result.stdout
 
     def test_central_repo_fetch_updates(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test fetching updates to central repository."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         # Create workspace
-        result = run_workspace(["switch", "test-fetch"], workspace_dir)
+        result = run_workspace("switch", "test-fetch", check=False)
         assert result.returncode == 0
         
         # Make a commit in the original repo
-        test_file = git_repos["repo-a"] / "update.txt"
+        repo_a_path = next(path for name, path in git_repos if name == "repo-a")
+        test_file = repo_a_path / "update.txt"
         test_file.write_text("updated content")
-        subprocess.run(["git", "add", "."], cwd=git_repos["repo-a"], check=True)
-        subprocess.run(["git", "commit", "-m", "update"], cwd=git_repos["repo-a"], check=True)
+        subprocess.run(["git", "add", "."], cwd=repo_a_path, check=True)
+        subprocess.run(["git", "commit", "-m", "update"], cwd=repo_a_path, check=True)
         
         # Sync should fetch to central repo
-        sync_result = run_workspace(["sync", "test-fetch"], workspace_dir)
+        sync_result = run_workspace("sync", "test-fetch", check=False)
         assert sync_result.returncode == 0
         
         # Verify update is in worktree
@@ -259,6 +286,12 @@ class TestCentralRepositoryManagement:
     def test_central_repo_with_large_history(self, temp_workspace_git_enabled, run_workspace):
         """Test handling repositories with large histories."""
         workspace_dir = temp_workspace_git_enabled
+        
+        # Copy workspace script first
+        script_source = Path(__file__).parent.parent / "workspace"
+        script_dest = workspace_dir / "workspace"
+        shutil.copy2(script_source, script_dest)
+        script_dest.chmod(0o755)
         
         # Create a repo with multiple commits
         large_repo = Path(tempfile.mkdtemp()) / "large-repo"
@@ -276,7 +309,7 @@ class TestCentralRepositoryManagement:
         config_file.write_text(f"repo {large_repo}")
         
         # Create workspace with large repo
-        result = run_workspace(["switch", "test-large"], workspace_dir)
+        result = run_workspace("switch", "test-large", check=False)
         assert result.returncode == 0
         
         # Verify all history is available
@@ -297,6 +330,7 @@ class TestWorktreeErrorHandling:
     def test_worktree_creation_failure(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test handling of worktree creation failures."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         # Create a directory where worktree should be created
         blocking_dir = workspace_dir / "worktrees" / "blocked" / "repo-a"
@@ -304,15 +338,16 @@ class TestWorktreeErrorHandling:
         (blocking_dir / "blocking_file.txt").write_text("blocking")
         
         # Try to create workspace (should handle existing directory)
-        result = run_workspace(["switch", "blocked"], workspace_dir)
+        result = run_workspace("switch", "blocked", check=False)
         # The tool should handle this gracefully
 
     def test_corrupted_central_repo(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test handling corrupted central repository."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         # Create workspace
-        result = run_workspace(["switch", "test-corrupt"], workspace_dir)
+        result = run_workspace("switch", "test-corrupt", check=False)
         assert result.returncode == 0
         
         # Corrupt the central repo
@@ -331,15 +366,16 @@ class TestWorktreeErrorHandling:
                     break
         
         # Try to sync (should handle corruption gracefully)
-        sync_result = run_workspace(["sync", "test-corrupt"], workspace_dir)
+        sync_result = run_workspace("sync", "test-corrupt", check=False)
         # Should handle the error gracefully
 
     def test_permission_denied_worktree(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test handling permission denied errors."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         # Create workspace
-        result = run_workspace(["switch", "test-perms"], workspace_dir)
+        result = run_workspace("switch", "test-perms", check=False)
         assert result.returncode == 0
         
         # Make a directory read-only
@@ -349,7 +385,7 @@ class TestWorktreeErrorHandling:
             os.chmod(repo_dir, 0o555)
             
             # Try to sync (should handle permission error)
-            sync_result = run_workspace(["sync", "test-perms"], workspace_dir)
+            sync_result = run_workspace("sync", "test-perms", check=False)
             
             # Restore permissions for cleanup
             os.chmod(repo_dir, 0o755)
@@ -357,12 +393,13 @@ class TestWorktreeErrorHandling:
     def test_disk_space_simulation(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test handling of disk space issues (simulated)."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         # This is hard to test without actually filling disk
         # We can test that large operations are handled
         
         # Create workspace
-        result = run_workspace(["switch", "test-space"], workspace_dir)
+        result = run_workspace("switch", "test-space", check=False)
         assert result.returncode == 0
         
         # Create a large file in repo
@@ -374,19 +411,25 @@ class TestWorktreeErrorHandling:
         subprocess.run(["git", "commit", "-m", "large file"], cwd=large_file.parent, check=True)
         
         # Sync should handle this
-        sync_result = run_workspace(["sync", "test-space"], workspace_dir)
+        sync_result = run_workspace("sync", "test-space", check=False)
         assert sync_result.returncode == 0
 
     def test_network_failure_recovery(self, temp_workspace_git_enabled, run_workspace):
         """Test recovery from network failures."""
         workspace_dir = temp_workspace_git_enabled
         
+        # Copy workspace script first
+        script_source = Path(__file__).parent.parent / "workspace"
+        script_dest = workspace_dir / "workspace"
+        shutil.copy2(script_source, script_dest)
+        script_dest.chmod(0o755)
+        
         # Configure a non-existent remote
         config_file = workspace_dir / "workspace.conf"
         config_file.write_text("repo https://non-existent-repo-12345.example.com/repo.git")
         
         # Try to create workspace (should handle network failure)
-        result = run_workspace(["switch", "test-network"], workspace_dir)
+        result = run_workspace("switch", "test-network", check=False)
         # Should fail gracefully with appropriate error message
 
 
@@ -396,6 +439,12 @@ class TestWorktreeIntegration:
     def test_worktree_with_submodules(self, temp_workspace_git_enabled, run_workspace):
         """Test worktrees with repositories containing submodules."""
         workspace_dir = temp_workspace_git_enabled
+        
+        # Copy workspace script first
+        script_source = Path(__file__).parent.parent / "workspace"
+        script_dest = workspace_dir / "workspace"
+        shutil.copy2(script_source, script_dest)
+        script_dest.chmod(0o755)
         
         # Create a repo with submodule
         parent_repo = Path(tempfile.mkdtemp()) / "parent-repo"
@@ -423,7 +472,7 @@ class TestWorktreeIntegration:
         config_file.write_text(f"repo {parent_repo}")
         
         # Create workspace
-        result = run_workspace(["switch", "test-submodule"], workspace_dir)
+        result = run_workspace("switch", "test-submodule", check=False)
         assert result.returncode == 0
         
         # Verify submodule handling
@@ -433,6 +482,12 @@ class TestWorktreeIntegration:
     def test_worktree_with_symlinks(self, temp_workspace_git_enabled, run_workspace):
         """Test worktrees with symbolic links."""
         workspace_dir = temp_workspace_git_enabled
+        
+        # Copy workspace script first
+        script_source = Path(__file__).parent.parent / "workspace"
+        script_dest = workspace_dir / "workspace"
+        shutil.copy2(script_source, script_dest)
+        script_dest.chmod(0o755)
         
         # Create a repo with symlink
         link_repo = Path(tempfile.mkdtemp()) / "link-repo"
@@ -451,7 +506,7 @@ class TestWorktreeIntegration:
         config_file.write_text(f"repo {link_repo}")
         
         # Create workspace
-        result = run_workspace(["switch", "test-symlink"], workspace_dir)
+        result = run_workspace("switch", "test-symlink", check=False)
         assert result.returncode == 0
         
         # Verify symlink is preserved
@@ -463,12 +518,13 @@ class TestWorktreeIntegration:
     def test_worktree_performance_metrics(self, temp_workspace_git_enabled, git_repos, run_workspace):
         """Test and measure worktree performance vs clone approach."""
         workspace_dir = temp_workspace_git_enabled
+        setup_workspace_config(workspace_dir, git_repos)
         
         import time
         
         # Measure worktree creation time
         start = time.time()
-        result = run_workspace(["switch", "perf-test"], workspace_dir)
+        result = run_workspace("switch", "perf-test", check=False)
         worktree_time = time.time() - start
         assert result.returncode == 0
         
