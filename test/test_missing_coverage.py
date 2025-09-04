@@ -110,7 +110,8 @@ file://{alt_repo_a}
         
         # Current behavior: last repo with same name overwrites earlier ones
         workspace_dir = Path("worktrees/main")
-        repos = list(workspace_dir.iterdir())
+        # Filter for actual repository directories (exclude .git, workspace, workspace.conf, etc.)
+        repos = [d for d in workspace_dir.iterdir() if d.is_dir() and d.name.startswith("repo-")]
         assert len(repos) == 2  # Only repo-b and one repo-a (the last one)
     
     def test_nested_directory_structures(self, run_workspace, temp_workspace, base_git_repos, clean_workspace):

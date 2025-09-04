@@ -449,7 +449,12 @@ class TestScaleAndPerformance:
         repos_dir = Path("..").resolve() / "repos"
         large_repo = repos_dir / "large-repo"
         large_repo.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["git", "init", "--bare"], cwd=large_repo, capture_output=True)
+        subprocess.run(["git", "init"], cwd=large_repo, capture_output=True)  # Not bare
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=large_repo, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=large_repo, capture_output=True)
+        (large_repo / "README.md").write_text("Large repo")
+        subprocess.run(["git", "add", "."], cwd=large_repo, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "Initial"], cwd=large_repo, capture_output=True)
         
         config_path = temp_workspace / "workspace.conf"
         config_path.write_text(f"file://{large_repo}")

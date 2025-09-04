@@ -437,8 +437,8 @@ config_set() {
     # 2. <repo-name> <url> [branch] [ref]
     local url branch ref repo_name
     
-    if [[ "$repo_spec" =~ ^https?:// || "$repo_spec" =~ ^git@ || "$repo_spec" =~ ^ssh:// || "$repo_spec" =~ \.git$ ]]; then
-        # First arg is URL
+    if [[ "$repo_spec" =~ ^https?:// || "$repo_spec" =~ ^git@ || "$repo_spec" =~ ^ssh:// || "$repo_spec" =~ \.git$ || "$repo_spec" =~ ^file:// || "$repo_spec" =~ ^/ ]]; then
+        # First arg is URL or absolute path
         url="$repo_spec"
         branch="${remaining_args[0]:-main}"
         ref="${remaining_args[1]:-}"
