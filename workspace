@@ -114,6 +114,26 @@ create_worktree() {
     local worktree_path="$3"
     local central_repo="$REPOS_DIR/$name"
     
+    # Check if worktree path exists but is corrupted
+    if [[ -e "$worktree_path/.git" ]]; then
+        # Check if the .git file is corrupted
+        local corrupted=false
+        if [[ -f "$worktree_path/.git" ]]; then
+            # Check if it's a valid worktree reference
+            if ! grep -q "^gitdir:" "$worktree_path/.git" 2>/dev/null; then
+                corrupted=true
+            fi
+        fi
+        
+        if [[ "$corrupted" == true ]]; then
+            echo "  Detected corrupted worktree at $worktree_path, removing..."
+            # Force remove corrupted worktree
+            rm -rf "$worktree_path"
+            # Also try to prune worktrees from central repo
+            (cd "$central_repo" && git worktree prune 2>/dev/null || true)
+        fi
+    fi
+    
     # Ensure the central repo is up to date (skip for local repos)
     if (cd "$central_repo" && git remote get-url origin 2>/dev/null | grep -qE "^(https?://|git@|ssh://)"); then
         (cd "$central_repo" && git fetch --all --quiet 2>/dev/null || true)
@@ -157,8 +177,16 @@ remove_worktree() {
     local worktree_path="$2"
     local central_repo="$REPOS_DIR/$name"
     
-    if [[ -d "$central_repo" && -d "$worktree_path" ]]; then
-        (cd "$central_repo" && git worktree remove "$worktree_path" --force 2>/dev/null || true)
+    if [[ -d "$central_repo" && -e "$worktree_path" ]]; then
+        # Try normal worktree remove first
+        if ! (cd "$central_repo" && git worktree remove "$worktree_path" --force 2>/dev/null); then
+            # If that fails, force remove the directory and prune
+            rm -rf "$worktree_path"
+            (cd "$central_repo" && git worktree prune 2>/dev/null || true)
+        fi
+    elif [[ -e "$worktree_path" ]]; then
+        # No central repo, just remove the directory
+        rm -rf "$worktree_path"
     fi
 }
 
@@ -272,8 +300,35 @@ sync_workspace() {
             # Update central repository first
             local central_repo="$REPOS_DIR/$name"
             [[ -d "$central_repo" ]] && (cd "$central_repo" && git fetch --all --quiet)
-            # Then update the worktree
-            (cd "$repo_path" && git pull --ff-only)
+            
+            # Check if upstream is set, and set it if not
+            (
+                cd "$repo_path"
+                local current_branch=$(git branch --show-current)
+                if [[ -n "$current_branch" ]]; then
+                    # Check if upstream is set
+                    if ! git rev-parse --abbrev-ref "$current_branch@{upstream}" &>/dev/null; then
+                        # Try to set upstream to origin/branch
+                        if git rev-parse --verify "origin/$current_branch" &>/dev/null; then
+                            echo "    Setting upstream to origin/$current_branch"
+                            git branch --set-upstream-to="origin/$current_branch" "$current_branch"
+                        else
+                            # If remote branch doesn't exist, check if we have local commits
+                            local unpushed_commits=$(git rev-list --count HEAD --not --remotes=origin 2>/dev/null || echo "0")
+                            if [[ "$unpushed_commits" -gt 0 ]]; then
+                                echo "    Warning: $unpushed_commits local commit(s) not pushed to remote"
+                                # Don't try to pull if we have local commits and no remote branch
+                                exit 0
+                            fi
+                        fi
+                    fi
+                    
+                    # Now try to pull
+                    if git rev-parse --abbrev-ref "$current_branch@{upstream}" &>/dev/null; then
+                        git pull --ff-only
+                    fi
+                fi
+            )
         fi
     done < <(load_repos "$branch")
 }
@@ -321,33 +376,89 @@ foreach_repos() {
         shift
     fi
     
-    # Try to detect current workspace  
+    # Check if a workspace is explicitly specified
     local workspace_branch=""
-    # Check if we're in a worktree by looking for .git file that points to a worktree
-    if [[ -f "$PWD/.git" ]] && grep -q "^gitdir: .*/\.git/worktrees/" "$PWD/.git" 2>/dev/null; then
-        # Extract workspace name from the gitdir path
-        # gitdir format: /path/to/workspace/.git/worktrees/workspace-name
-        local gitdir=$(grep "^gitdir:" "$PWD/.git" | cut -d: -f2- | xargs)
-        workspace_branch=$(basename "$gitdir")
-    else
-        # Try to find workspace by checking parent directories
-        local check_dir="$PWD"
-        while [[ "$check_dir" != "/" ]]; do
-            if [[ -d "$WORKTREES_DIR" ]] && [[ "$check_dir" == "$WORKTREES_DIR"/* ]]; then
-                workspace_branch=$(echo "$check_dir" | sed "s|^$WORKTREES_DIR/||" | cut -d/ -f1)
-                break
-            fi
-            check_dir=$(dirname "$check_dir")
-        done
+    local workspace_specified=false
+    
+    # Check if first argument could be a workspace name (doesn't start with -)
+    # But only if we have at least 2 arguments (workspace name + command)
+    if [[ $# -gt 1 ]] && [[ "$1" != -* ]] && [[ -d "$WORKTREES_DIR/$1" ]]; then
+        workspace_branch="$1"
+        workspace_specified=true
+        shift
     fi
     
-    [[ -z "$workspace_branch" ]] && { echo "Not in a workspace. Please cd to a workspace directory."; exit 1; }
+    # If no workspace specified, try to detect current workspace
+    if [[ -z "$workspace_branch" ]]; then
+        # First, check if there's exactly one workspace regardless of PWD
+        # This handles the case where the script is run from outside the workspace
+        if [[ -d "$WORKTREES_DIR" ]]; then
+            local workspace_count=0
+            local last_workspace=""
+            for ws_dir in "$WORKTREES_DIR"/*; do
+                if [[ -d "$ws_dir" ]]; then
+                    workspace_count=$((workspace_count + 1))
+                    last_workspace=$(basename "$ws_dir")
+                fi
+            done
+            
+            if [[ $workspace_count -eq 1 ]]; then
+                # Only one workspace exists, use it
+                workspace_branch="$last_workspace"
+            elif [[ $workspace_count -gt 1 ]]; then
+                # Multiple workspaces exist, need more context
+                # Check if we're at the workspace root
+                if [[ "$PWD" == "$WORKSPACE_ROOT" ]]; then
+                    echo "Multiple workspaces found. Please specify which one:"
+                    for ws_dir in "$WORKTREES_DIR"/*; do
+                        [[ -d "$ws_dir" ]] && echo "  $(basename "$ws_dir")"
+                    done
+                    echo "Usage: $0 foreach <workspace> <command>"
+                    exit 1
+                fi
+                # If not at workspace root, continue to try other detection methods
+            fi
+        fi
+        
+        # If still no workspace detected and there are multiple, try other detection methods
+        if [[ -z "$workspace_branch" ]]; then
+            # Check if we're in a worktree by looking for .git file that points to a worktree
+            if [[ -f "$PWD/.git" ]] && grep -q "^gitdir: .*/\.git/worktrees/" "$PWD/.git" 2>/dev/null; then
+                # Extract workspace name from the gitdir path
+                # gitdir format: /path/to/workspace/.git/worktrees/workspace-name
+                local gitdir=$(grep "^gitdir:" "$PWD/.git" | cut -d: -f2- | xargs)
+                workspace_branch=$(basename "$gitdir")
+            else
+                # Try to find workspace by checking parent directories
+                local check_dir="$PWD"
+                while [[ "$check_dir" != "/" ]]; do
+                    if [[ -d "$WORKTREES_DIR" ]] && [[ "$check_dir" == "$WORKTREES_DIR"/* ]]; then
+                        workspace_branch=$(echo "$check_dir" | sed "s|^$WORKTREES_DIR/||" | cut -d/ -f1)
+                        break
+                    fi
+                    check_dir=$(dirname "$check_dir")
+                done
+            fi
+        fi
+    fi
+    
+    [[ -z "$workspace_branch" ]] && { echo "Not in a workspace. Please cd to a workspace directory or specify workspace name."; exit 1; }
     
     local workspace_dir="$WORKTREES_DIR/$workspace_branch"
     [[ ! -d "$workspace_dir" ]] && { echo "Workspace not found: $workspace_branch"; exit 1; }
+    
+    # Deduplicate repositories by URL to avoid processing duplicates
+    declare -A seen_urls
     while read -r repo_line; do
         read -ra parts <<< "$repo_line"
         local url="${parts[0]}"
+        
+        # Skip if we've already processed this URL
+        if [[ -n "${seen_urls[$url]:-}" ]]; then
+            continue
+        fi
+        seen_urls[$url]=1
+        
         local name=$(get_repo_name "$url")
         local repo_path="$workspace_dir/$name"
         local displaypath="${repo_path#$workspace_dir/}"

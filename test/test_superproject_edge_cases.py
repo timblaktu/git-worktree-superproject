@@ -335,7 +335,9 @@ class TestScaleAndResourceLimits:
         result = run_workspace("foreach", "echo $name", check=False)
         # Foreach may fail if not in workspace directory context
         if result.returncode == 0:
-            assert result.stdout.count("===") == 3  # One header per unique repo
+            # Count unique repo headers (format: "=== repo-name ===")
+            headers = [line for line in result.stdout.split('\n') if line.startswith("===") and line.endswith("===")]
+            assert len(headers) == 3  # One header per unique repo
     
     def test_deeply_nested_workspace_paths(self, run_workspace, temp_workspace, base_git_repos, clean_workspace):
         """Test handling of deeply nested workspace directory structures."""
