@@ -4,7 +4,7 @@
 
 ## Overview
 
-`wt-super` is a simple bash script that replaces Git submodules with a more flexible and intuitive approach to multi-repository development. Instead of dealing with submodule complexity, it manages independent "workspaces" where each contains clones of all your repositories at consistent branches or specific versions.
+`wt-super` is a simple bash script that replaces Git submodules with a more flexible and intuitive approach to multi-repository development. Instead of dealing with submodule complexity, it manages independent "workspaces" using git worktrees where each contains linked working trees of all your repositories at consistent branches or specific versions.
 
 ### Why Not Submodules?
 
@@ -18,13 +18,14 @@ Git submodules were designed for managing external dependencies with independent
 
 ### The wt-super Solution
 
+- ✅ **Git worktree efficiency** - Shared git objects reduce disk usage
 - ✅ **Flexible configuration** - Per-workspace or shared configurations
 - ✅ **Version-controlled configs** - Workspace settings tracked in git
 - ✅ **Flexible pinning** - Mix branch-tracking and version-pinned repositories
-- ✅ **Isolated workspaces** - Each workspace is completely independent
+- ✅ **Isolated workspaces** - Each workspace uses independent worktrees
 - ✅ **Clean Git history** - No submodule pointer commits
 - ✅ **Intuitive commands** - Easy to learn and debug
-- ✅ **Parallel development** - Multiple workspaces for different features
+- ✅ **Parallel development** - Multiple worktrees for different features
 
 ## Quick Start
 
@@ -173,7 +174,7 @@ Switch to a workspace for the specified branch, creating it if needed (defaults 
 
 **Behavior:**
 - Creates `worktrees/[branch]` directory if it doesn't exist
-- Clones all repositories from `workspace.conf`
+- Creates git worktrees for all repositories (shared git objects in `repos/` directory)
 - Repositories track workspace branch unless configured otherwise
 - Pinned repositories checkout to specific refs (detached HEAD)
 - Skips repositories that already exist
@@ -391,9 +392,9 @@ cd "worktrees/$GITHUB_REF_NAME"
 ## Expected Behaviors
 
 ### Repository Cloning
-- **Branch exists remotely**: Clones specific branch directly
-- **Branch doesn't exist**: Clones default branch, then creates local branch
-- **Pinned repository**: Always clones specified branch, then checks out ref
+- **Branch exists remotely**: Creates worktree for specific branch directly
+- **Branch doesn't exist**: Creates worktree from default branch, then creates local branch
+- **Pinned repository**: Always creates worktree for specified branch, then checks out ref
 
 ### Synchronization
 - **Branch-tracking repos**: Updated with `git pull --ff-only`
@@ -403,7 +404,7 @@ cd "worktrees/$GITHUB_REF_NAME"
 
 ### Error Handling
 - **Missing config file**: Creates empty workspace
-- **Invalid git URL**: Clone fails, error reported
+- **Invalid git URL**: Worktree creation fails, error reported
 - **Network issues**: Operation fails with git error message
 - **Permission issues**: Fails with appropriate error
 
@@ -459,7 +460,7 @@ git config -f .gitmodules --get-regexp '^submodule\..*\.(path|url)$' | \
 git rm .gitmodules
 rm -rf .git/modules/
 
-# Remove submodule directories (they'll be recreated as regular clones)
+# Remove submodule directories (they'll be recreated as worktrees)
 git submodule deinit --all
 git submodule | cut -d' ' -f3 | xargs rm -rf
 
@@ -490,7 +491,7 @@ git commit -m "Migrate from submodules to wt-super"
 
 ### Common Issues
 
-**"Repository not found" during clone:**
+**"Repository not found" during worktree creation:**
 - Check URL format and access permissions
 - Verify SSH keys are configured for private repositories
 

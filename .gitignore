@@ -17,10 +17,11 @@ __pycache__/
 # IDE
 .vscode/
 .idea/
+**/*.vim
 
 .claude/
+**/CLAUDE*.md
 .serena/
-CLAUDE.md
-**/*.vim
+
 **/*.log
 pytest-result-bar/
