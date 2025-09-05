@@ -20,12 +20,12 @@ class TestWorkspaceNames:
         "2024-01-release",
         pytest.param("feature branch", marks=pytest.mark.xfail(reason="Spaces not supported")),
     ])
-    def test_init_with_various_names(self, run_workspace, workspace_config, clean_workspace, workspace_name):
-        """Test initializing workspaces with various naming patterns."""
-        result = run_workspace("init", workspace_name)
+    def test_switch_with_various_names(self, run_workspace, workspace_config, clean_workspace, workspace_name):
+        """Test switching to workspaces with various naming patterns."""
+        result = run_workspace("switch", workspace_name)
         
         assert result.returncode == 0
-        assert f"Initializing workspace: {workspace_name}" in result.stdout
+        assert f"Switching to workspace: {workspace_name}" in result.stdout
         assert Path(f"worktrees/{workspace_name}").exists()
         
         # Verify repos were cloned
@@ -56,7 +56,7 @@ class TestRepositoryURLFormats:
         test_urls = [f"file://{path}" for _, path in git_repos]
         create_config_with_urls(test_urls)
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Verify repos were cloned (at least some should succeed)
@@ -100,8 +100,8 @@ class TestRepositoryURLs:
         
         create_config_with_urls(local_repos)
         
-        result = run_workspace("init", check=False)
-        assert result.returncode == 0, f"Init failed: {result.stdout}\n{result.stderr}"
+        result = run_workspace("switch", check=False)
+        assert result.returncode == 0, f"Switch failed: {result.stdout}\n{result.stderr}"
         
         # This test verifies that:
         # 1. Local absolute paths work correctly
@@ -125,8 +125,8 @@ class TestRepositoryURLs:
     
     def test_git_config_inheritance(self, run_workspace, workspace_config, clean_workspace):
         """Test that git configuration is properly inherited in test environment."""
-        # Initialize a workspace first
-        result = run_workspace("init")
+        # Switch to a workspace first
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Test that git config is available in the test environment
@@ -162,7 +162,8 @@ class TestRepositoryURLs:
             
             # The credential helper should be accessible from the subprocess
             if result.returncode == 0 and result.stdout.strip():
-                assert "store" in result.stdout or "helper" in result.stdout
+                # Accept various types of credential helpers: store, cache, helper, manager, etc.
+                assert any(helper in result.stdout for helper in ["store", "helper", "cache", "manager"])
             else:
                 # If no global config, that's also valid - just document it
                 print(f"No global credential helper found: stdout='{result.stdout}', stderr='{result.stderr}'")
@@ -198,12 +199,12 @@ class TestForeachCommands:
         ("git status | wc -l", lambda out: all(line.strip().isdigit() for line in out.strip().split('\n') if line.strip() and not line.startswith('==='))),
         ("echo 'test' > test.txt && cat test.txt", lambda out: "test" in out),
         
-        # Multi-line commands
-        ("if [ -d .git ]; then echo 'Is git repo'; fi", lambda out: "Is git repo" in out),
+        # Multi-line commands - check for both .git directory and .git file (worktrees)
+        ("if [ -d .git ] || [ -f .git ]; then echo 'Is git repo'; fi", lambda out: "Is git repo" in out),
     ])
     def test_foreach_various_commands(self, run_workspace, workspace_config, clean_workspace, command, check_output):
         """Test foreach with various shell commands."""
-        run_workspace("init")
+        run_workspace("switch")
         os.chdir("worktrees/main")
         
         result = run_workspace("foreach", command)
@@ -219,7 +220,7 @@ class TestForeachCommands:
     def test_foreach_command_failures(self, run_workspace, workspace_config, clean_workspace, 
                                       failing_command, expected_error):
         """Test foreach behavior when commands fail."""
-        run_workspace("init")
+        run_workspace("switch")
         os.chdir("worktrees/main")
         
         result = run_workspace("foreach", failing_command, check=False)
@@ -231,11 +232,11 @@ class TestRealWorldGitOperations:
     
     def test_feature_branch_workflow(self, run_workspace, workspace_config, clean_workspace):
         """Test complete feature branch workflow."""
-        # Initialize main workspace
-        run_workspace("init", "main")
+        # Switch to main workspace
+        run_workspace("switch", "main")
         
         # Create feature branch workspace
-        run_workspace("init", "feature-auth")
+        run_workspace("switch", "feature-auth")
         
         # Work in feature workspace
         os.chdir("worktrees/feature-auth")
@@ -263,7 +264,7 @@ class TestRealWorldGitOperations:
         features = ["feature-ui", "feature-api", "feature-db"]
         
         for feature in features:
-            run_workspace("init", feature)
+            run_workspace("switch", feature)
             
             # Work in each feature
             os.chdir(f"worktrees/{feature}")
@@ -277,8 +278,8 @@ class TestRealWorldGitOperations:
     
     def test_sync_with_upstream_changes(self, run_workspace, workspace_config, git_repos, clean_workspace):
         """Test syncing when upstream has changes."""
-        # Initialize workspace
-        run_workspace("init", "main")
+        # Switch to workspace
+        run_workspace("switch", "main")
         
         # Change to workspace
         os.chdir("worktrees/main")
@@ -303,7 +304,7 @@ class TestErrorHandlingAndEdgeCases:
     """Test error handling and edge cases."""
     
     @pytest.mark.slow
-    def test_init_w_network_failure(self, run_workspace, temp_workspace, clean_workspace):
+    def test_switch_w_network_failure(self, run_workspace, temp_workspace, clean_workspace):
         """Test behavior when repository URLs are unreachable."""
         # Create config with unreachable URLs
         # This test doesn't require network access because it's testing failure cases
@@ -314,12 +315,12 @@ https://nonexistent-domain-12345.com/repo1.git
 git@nonexistent-host:user/repo2.git
 """)
         
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         assert result.returncode != 0
     
     def test_corrupted_workspace(self, run_workspace, workspace_config, clean_workspace):
         """Test handling of corrupted workspace."""
-        run_workspace("init")
+        run_workspace("switch")
         
         # Corrupt a repository
         repo_path = Path("worktrees/main/repo-a/.git")
@@ -334,7 +335,7 @@ git@nonexistent-host:user/repo2.git
     
     def test_concurrent_operations(self, run_workspace, workspace_config, clean_workspace):
         """Test concurrent operations on same workspace."""
-        run_workspace("init")
+        run_workspace("switch")
         
         # This is a simple test - in real scenarios you'd test actual concurrency
         os.chdir("worktrees/main")
@@ -363,7 +364,7 @@ git@nonexistent-host:user/repo2.git
         config_path = temp_workspace / "workspace.conf"
         config_path.write_text(invalid_config)
         
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         # Should either fail or skip invalid entries
 
 
@@ -388,16 +389,41 @@ class TestScaleAndPerformance:
             repo_name = f"scale-repo-{i:02d}"
             repo_path = repos_dir / repo_name
             repo_path.mkdir(parents=True, exist_ok=True)
-            subprocess.run(["git", "init", "--bare"], cwd=repo_path, capture_output=True)
+            
+            # Create a non-bare repo first to add content
+            temp_repo = repos_dir / f"{repo_name}_temp"
+            temp_repo.mkdir(parents=True, exist_ok=True)
+            subprocess.run(["git", "init"], cwd=temp_repo, capture_output=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=temp_repo, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Test User"], cwd=temp_repo, capture_output=True)
+            
+            # Add initial commit
+            (temp_repo / "README.md").write_text(f"# {repo_name}")
+            subprocess.run(["git", "add", "."], cwd=temp_repo, capture_output=True)
+            subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=temp_repo, capture_output=True)
+            
+            # Clone to bare repository
+            subprocess.run(["git", "clone", "--bare", str(temp_repo), str(repo_path)], capture_output=True)
+            
+            # Clean up temp repo
+            import shutil
+            shutil.rmtree(temp_repo)
+            
             config_lines.append(f"file://{repo_path}")
         
         config_path = temp_workspace / "workspace.conf"
         config_path.write_text("\n".join(config_lines))
         
-        # Time the init operation
+        # Time the switch operation
         start_time = time.time()
-        result = run_workspace("init")
+        result = run_workspace("switch", check=False)
         duration = time.time() - start_time
+        
+        # Debug output if failed
+        if result.returncode != 0:
+            print(f"Switch failed with return code: {result.returncode}")
+            print(f"STDOUT: {result.stdout}")
+            print(f"STDERR: {result.stderr}")
         
         assert result.returncode == 0
         assert duration < 60  # Should complete within 1 minute
@@ -423,12 +449,17 @@ class TestScaleAndPerformance:
         repos_dir = Path("..").resolve() / "repos"
         large_repo = repos_dir / "large-repo"
         large_repo.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["git", "init", "--bare"], cwd=large_repo, capture_output=True)
+        subprocess.run(["git", "init"], cwd=large_repo, capture_output=True)  # Not bare
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=large_repo, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=large_repo, capture_output=True)
+        (large_repo / "README.md").write_text("Large repo")
+        subprocess.run(["git", "add", "."], cwd=large_repo, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "Initial"], cwd=large_repo, capture_output=True)
         
         config_path = temp_workspace / "workspace.conf"
         config_path.write_text(f"file://{large_repo}")
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
 
 
@@ -478,6 +509,6 @@ file:///../repos/alt-repo-2
         config_path = temp_workspace / "workspace.conf"
         config_path.write_text("\n".join(config_lines))
         
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         # Should succeed with valid file:// URLs
         assert result.returncode == 0

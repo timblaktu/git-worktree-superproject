@@ -24,7 +24,7 @@ class TestConfigurationParsing:
         ])
         config_path.write_text(config_content)
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Check only specified repos were cloned
@@ -44,7 +44,7 @@ class TestConfigurationParsing:
         ])
         config_path.write_text(config_content)
         
-        result = run_workspace("init", "main")
+        result = run_workspace("switch", "main")
         assert result.returncode == 0
         
         # Verify branches
@@ -88,7 +88,7 @@ class TestConfigurationParsing:
         ])
         config_path.write_text(config_content)
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # Verify repo-c is at tag v1.0.0
@@ -118,7 +118,7 @@ class TestConfigurationParsing:
         ])
         config_path.write_text(config_content)
         
-        result = run_workspace("init")
+        result = run_workspace("switch")
         assert result.returncode == 0
         
         # All repos should be cloned
@@ -127,31 +127,23 @@ class TestConfigurationParsing:
         assert (workspace_dir / "repo-b").exists()
         assert (workspace_dir / "repo-c").exists()
     
-    def test_empty_config(self, run_workspace, temp_workspace, clean_workspace):
-        """Test empty configuration file."""
+    @pytest.mark.parametrize("config_content,test_description", [
+        ("", "empty configuration file"),
+        ("\n\n\n", "only newlines"),
+        ("# Just comments here\n# No actual repos\n\n# More comments\n", "only comments"),
+        ("  \t  \n  \t\n", "only whitespace"),
+        ("# Comment\n\n# Another comment\n\n\n", "comments and empty lines"),
+    ])
+    def test_empty_or_comment_only_configs(self, run_workspace, temp_workspace, clean_workspace,
+                                           config_content, test_description):
+        """Test configurations with no actual repository entries."""
         config_path = temp_workspace / "workspace.conf"
-        config_path.write_text("")
-        
-        result = run_workspace("init")
-        # Should succeed but create empty workspace
-        assert result.returncode == 0
-        assert Path("worktrees/main").exists()
-    
-    def test_config_only_comments(self, run_workspace, temp_workspace, clean_workspace):
-        """Test configuration with only comments."""
-        config_path = temp_workspace / "workspace.conf"
-        config_content = "\n".join([
-            "# Just comments here",
-            "# No actual repos",
-            "",
-            "# More comments",
-            ""  # Ensure trailing newline
-        ])
         config_path.write_text(config_content)
         
-        result = run_workspace("init")
-        assert result.returncode == 0
-        assert Path("worktrees/main").exists()
+        result = run_workspace("switch")
+        # Should succeed but create empty workspace
+        assert result.returncode == 0, f"Failed for {test_description}"
+        assert Path("worktrees/main").exists(), f"Workspace not created for {test_description}"
 
 
 class TestConfigurationErrors:
@@ -163,7 +155,7 @@ class TestConfigurationErrors:
         if config_path.exists():
             config_path.unlink()
         
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         assert result.returncode == 0  # Should succeed with empty workspace
     
     def test_invalid_git_url(self, run_workspace, temp_workspace, clean_workspace):
@@ -172,5 +164,30 @@ class TestConfigurationErrors:
         config_content = "not-a-valid-git-url\n"
         config_path.write_text(config_content)
         
-        result = run_workspace("init", check=False)
+        result = run_workspace("switch", check=False)
         assert result.returncode != 0
+    
+    def test_config_missing_final_newline(self, run_workspace, temp_workspace, base_git_repos, clean_workspace):
+        """Test that configuration with missing final newline still processes all repos.
+        
+        This test ensures the workspace script correctly handles configuration files
+        where the last line doesn't end with a newline character, which can cause
+        the `while read` loop to skip the last repository.
+        """
+        config_path = temp_workspace / "workspace.conf"
+        config_content = "\n".join([
+            f"{base_git_repos[0][1]}",
+            f"{base_git_repos[1][1]}",
+            f"{base_git_repos[2][1]}"  # No trailing newline - this is the bug we're testing
+        ])
+        # Write without final newline using write_bytes
+        config_path.write_bytes(config_content.encode())
+        
+        result = run_workspace("switch")
+        assert result.returncode == 0
+        
+        # All three repos should be created, including the last one without newline
+        workspace_dir = Path("worktrees/main")
+        assert (workspace_dir / "repo-a").exists()
+        assert (workspace_dir / "repo-b").exists()
+        assert (workspace_dir / "repo-c").exists(), "Last repository should be created despite missing newline"

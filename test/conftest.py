@@ -10,15 +10,15 @@ from typing import Generator, List, Tuple
 import pytest
 
 
-# Import our custom plugin
-pytest_plugins = ["test.pytest_result_bar"]
+# pytest-result-bar plugin will auto-register via entry points
+# No need to manually specify pytest_plugins anymore
 
 
 @pytest.fixture
 def temp_workspace(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary workspace directory for testing."""
     workspace_dir = tmp_path / "test_workspace"
-    workspace_dir.mkdir()
+    workspace_dir.mkdir(exist_ok=True)
     
     # Save current directory
     original_dir = os.getcwd()
@@ -187,7 +187,8 @@ def run_workspace(workspace_script: Path):
             capture_output=capture_output,
             text=text,
             input=input,
-            env=run_env
+            env=run_env,
+            cwd=os.getcwd()  # Run from current test directory
         )
         return result
     return _run
@@ -323,6 +324,35 @@ def large_superproject_config(temp_workspace: Path, base_git_repos: List[Tuple[s
     config_lines.append("")
     config_path.write_text("\n".join(config_lines))
     return config_path
+
+
+@pytest.fixture
+def temp_workspace_git_enabled(tmp_path: Path) -> Generator[Path, None, None]:
+    """Create temp workspace with git initialization for per-workspace config tests."""
+    workspace_dir = tmp_path / "test_workspace"
+    workspace_dir.mkdir(exist_ok=True)
+    
+    # Save current directory
+    original_dir = os.getcwd()
+    
+    try:
+        os.chdir(workspace_dir)
+        
+        # Initialize as git repo
+        subprocess.run(["git", "init"], check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], check=True, capture_output=True)
+        subprocess.run(["git", "config", "extensions.worktreeConfig", "true"], check=True, capture_output=True)
+        
+        # Create initial commit
+        (workspace_dir / ".gitignore").write_text("worktrees/\nrepos/\n")
+        subprocess.run(["git", "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "Initial"], check=True, capture_output=True)
+        
+        yield workspace_dir
+    finally:
+        # Restore original directory
+        os.chdir(original_dir)
 
 
 @pytest.fixture

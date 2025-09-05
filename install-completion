@@ -1,0 +1,28 @@
+#!/bin/bash
+# Install workspace completions to XDG directories (NixOS-friendly)
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPLETION_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions"
+
+# Ensure completion directory exists
+mkdir -p "$COMPLETION_DIR"
+
+# Install zsh completion
+if [[ -f "$SCRIPT_DIR/workspace-completion.zsh" ]]; then
+    echo "Installing zsh completion to $COMPLETION_DIR/_workspace"
+    cp "$SCRIPT_DIR/workspace-completion.zsh" "$COMPLETION_DIR/_workspace"
+    echo "✓ Zsh completion installed"
+    echo ""
+    echo "To activate completions in your current shell:"
+    echo "  exec \$SHELL"
+    echo ""
+    echo "The completion will be automatically loaded in new shells."
+else
+    echo "Error: workspace-completion.zsh not found"
+    exit 1
+fi
+
+# Note about bash completions if needed in future
+echo "Note: Bash completions would go to \${XDG_DATA_HOME:-\$HOME/.local/share}/bash-completion/completions/"

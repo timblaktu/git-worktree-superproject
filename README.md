@@ -4,7 +4,7 @@
 
 ## Overview
 
-`wt-super` is a simple bash script that replaces Git submodules with a more flexible and intuitive approach to multi-repository development. Instead of dealing with submodule complexity, it manages independent "workspaces" where each contains clones of all your repositories at consistent branches or specific versions.
+`wt-super` is a simple bash script that replaces Git submodules with a more flexible and intuitive approach to multi-repository development. Instead of dealing with submodule complexity, it manages independent "workspaces" using git worktrees where each contains linked working trees of all your repositories at consistent branches or specific versions.
 
 ### Why Not Submodules?
 
@@ -18,12 +18,14 @@ Git submodules were designed for managing external dependencies with independent
 
 ### The wt-super Solution
 
-- ✅ **Simple configuration** - One `workspace.conf` file defines everything
+- ✅ **Git worktree efficiency** - Shared git objects reduce disk usage
+- ✅ **Flexible configuration** - Per-workspace or shared configurations
+- ✅ **Version-controlled configs** - Workspace settings tracked in git
 - ✅ **Flexible pinning** - Mix branch-tracking and version-pinned repositories
-- ✅ **Isolated workspaces** - Each workspace is completely independent
+- ✅ **Isolated workspaces** - Each workspace uses independent worktrees
 - ✅ **Clean Git history** - No submodule pointer commits
 - ✅ **Intuitive commands** - Easy to learn and debug
-- ✅ **Parallel development** - Multiple workspaces for different features
+- ✅ **Parallel development** - Multiple worktrees for different features
 
 ## Quick Start
 
@@ -38,27 +40,24 @@ curl -o workspace https://raw.githubusercontent.com/example/wt-super/main/worksp
 chmod +x workspace
 ```
 
-3. **Configure your repositories in `workspace.conf`:**
+3. **Configure your repositories using templates:**
 ```bash
-# workspace.conf - Repository definitions
-# Format: url [branch] [ref]
-
-# Core repositories that track workspace branches  
-git@github.com:myorg/app.git
-git@github.com:myorg/backend.git  
-git@github.com:myorg/shared-lib.git
+# Set up repository templates (replaces workspace.conf)
+./workspace config set-default git@github.com:myorg/app.git
+./workspace config set-default git@github.com:myorg/backend.git  
+./workspace config set-default git@github.com:myorg/shared-lib.git
 
 # Repository with specific branch preference
-git@github.com:myorg/firmware.git stable
+./workspace config set-default git@github.com:myorg/firmware.git stable
 
 # Pinned dependencies (read-only, specific versions)
-https://github.com/vendor/sdk.git main v1.2.0
-https://github.com/third-party/lib.git master 3a4b5c6
+./workspace config set-default https://github.com/vendor/sdk.git main v1.2.0
+./workspace config set-default https://github.com/third-party/lib.git master 3a4b5c6
 ```
 
 4. **Create your first workspace:**
 ```bash
-./workspace init main
+./workspace switch main
 cd worktrees/main
 # All repositories are now available and ready for development
 ```
@@ -72,23 +71,64 @@ echo "worktrees/" >> .gitignore
 
 ```
 my-project/
-├── workspace.conf          # Repository configuration (like .gitmodules)
 ├── workspace               # Management script  
-├── .gitignore             # Ignore worktrees directory
+├── .gitignore             # Ignore worktrees and repos directories
+├── .git/                  # Superproject git repository
+│   ├── config             # Template configurations (workspace.repo)
+│   │                      # Workspace overrides (workspace.override.*)
+│   └── worktrees/         # Git worktree metadata
+├── repos/                 # Central bare repositories (internal cache)
 └── worktrees/             # All workspaces live here
-    ├── main/              # Main branch workspace
+    ├── main/              # Main branch workspace (git worktree)
+    │   ├── .git           # Worktree git file
     │   ├── app/           # First repository
     │   ├── backend/       # Second repository  
     │   └── shared-lib/    # Third repository
-    └── feature-auth/      # Feature branch workspace
+    └── feature-auth/      # Feature branch workspace (git worktree)
+        ├── .git           # Worktree git file
         ├── app/
         ├── backend/
         └── shared-lib/
 ```
 
-## Configuration Format
+## Configuration
 
-The `workspace.conf` file uses a simple space-separated format:
+### Per-Workspace Configuration (NEW)
+
+**wt-super now supports per-workspace repository configurations!** Each workspace can have completely different repository specifications, enabling advanced workflows:
+
+- Different branches for different workspaces
+- Workspace-specific repository subsets
+- Independent version pinning per workspace
+- Configuration tracked in git history
+
+#### Configuration Priority
+
+1. **Workspace-specific overrides** (superproject git config) - Highest priority
+2. **Template defaults** (superproject git config) - Inherited by all workspaces
+
+> **Note**: workspace.conf files are no longer supported. Use `workspace config` commands for all configuration.
+
+#### Setting Configurations
+
+```bash
+# Set template repositories for all workspaces
+./workspace config set-default https://github.com/org/app.git
+./workspace config set-default https://github.com/org/backend.git main
+
+# Set workspace-specific overrides
+./workspace config set feature-x app feature-branch
+./workspace config set feature-x backend develop
+
+# Show effective configuration for a workspace
+./workspace config show feature-x
+```
+
+### ⚠️  Deprecated: workspace.conf Format 
+
+> **DEPRECATED**: The `workspace.conf` file format has been removed and is no longer supported. Use `workspace config` commands instead.
+
+For reference, the old format used a simple space-separated syntax:
 
 ```bash
 # workspace.conf
@@ -120,18 +160,18 @@ https://github.com/third-party/lib.git main 3a4b5c6
 
 ## Commands
 
-### `workspace init [branch]`
-Initialize a new workspace for the specified branch (defaults to `main`).
+### `workspace switch [branch]`
+Switch to a workspace for the specified branch, creating it if needed (defaults to `main`).
 
 ```bash
-./workspace init                    # Create main workspace
-./workspace init feature-payment    # Create feature branch workspace
-./workspace init release-v2.0       # Create release workspace
+./workspace switch                    # Switch to main workspace
+./workspace switch feature-payment    # Switch to feature branch workspace
+./workspace switch release-v2.0       # Switch to release workspace
 ```
 
 **Behavior:**
-- Creates `worktrees/[branch]` directory
-- Clones all repositories from `workspace.conf`
+- Creates `worktrees/[branch]` directory if it doesn't exist
+- Creates git worktrees for all repositories (shared git objects in `repos/` directory)
 - Repositories track workspace branch unless configured otherwise
 - Pinned repositories checkout to specific refs (detached HEAD)
 - Skips repositories that already exist
@@ -226,15 +266,232 @@ Remove a workspace and all its repositories.
 - Removes entire workspace directory
 - Cannot be undone - use with caution
 
+### `workspace repair <workspace> <repository>`
+Repair broken or corrupted repositories in a workspace.
+
+```bash
+./workspace repair main app
+./workspace repair feature-x backend
+```
+
+**Behavior:**
+- Detects and fixes various broken repository states:
+  - Uninitialized repositories (cloned but no commits)
+  - Corrupted worktree references  
+  - Standalone repositories that should be worktrees
+  - Invalid HEAD references
+- Converts standalone repos to worktree architecture when needed
+- Recreates repositories from central cache if necessary
+- Handles timeout issues during fetch operations
+
+**Common use cases:**
+- Repository shows `[uninitialized]` or `[broken]` in status
+- After network interruptions during repository setup
+- When converting legacy setups to worktree architecture
+- Fixing repositories after git operations fail
+
+### `workspace config <subcommand>`
+Manage per-workspace repository configurations.
+
+```bash
+# Set workspace-specific configuration
+./workspace config set feature-x https://github.com/org/app.git feature-branch v2.0
+
+# Show configuration for a workspace
+./workspace config show feature-x
+
+# Template-based configuration (current method)
+./workspace config set-default https://github.com/org/repo.git
+
+# Set default configuration for all workspaces
+./workspace config set-default https://github.com/org/shared.git main
+```
+
+**Subcommands:**
+- `set <workspace> <repo-name> <branch> [ref]` - Override branch for specific workspace
+- `show [workspace]` - Display effective configuration  
+- `set-default <url> [branch] [ref]` - Add repository to template
+- `help` - Show detailed usage and examples
+
 ### `workspace help`
 Show help information and usage examples.
+
+### `workspace install-completion [shell]`
+Install shell completion for bash or zsh. Auto-detects shell if not specified.
+
+The workspace script includes shell completion support for both bash and zsh to enhance your command-line experience.
+
+#### Features
+
+- Command name completion (switch, sync, status, etc.)
+- Workspace name completion for relevant commands
+- Repository name completion for config commands
+- Branch name suggestions
+- Config subcommand completion
+- Smart context-aware suggestions
+
+#### Installation
+
+##### Automatic Installation (Recommended)
+
+```bash
+# Auto-detect shell and install
+./workspace install-completion
+
+# Or specify shell explicitly
+./workspace install-completion bash
+./workspace install-completion zsh
+```
+
+This installs completions to standard XDG directories:
+- **Bash**: `~/.local/share/bash-completion/completions/workspace`
+- **Zsh**: `~/.local/share/zsh/site-functions/_workspace`
+
+These locations work on all systems including Nix/NixOS where shell init files are read-only.
+
+##### Manual Installation
+
+**Bash:**
+```bash
+mkdir -p ~/.local/share/bash-completion/completions
+cp workspace-completion.bash ~/.local/share/bash-completion/completions/workspace
+```
+
+**Zsh:**
+```bash
+mkdir -p ~/.local/share/zsh/site-functions
+cp workspace-completion.zsh ~/.local/share/zsh/site-functions/_workspace
+```
+
+**Note**: If zsh completions don't work, ensure the XDG directory is in your fpath:
+```bash
+# Add to .zshrc:
+fpath=($HOME/.local/share/zsh/site-functions $fpath)
+autoload -Uz compinit && compinit
+
+# To customize or remove the "Completing" prefix in zsh:
+zstyle ':completion:*:descriptions' format '%B%d:%b'  # Show just description with colon
+# Or remove descriptions entirely:
+zstyle ':completion:*:descriptions' format ''
+```
+
+##### Home Manager Integration
+
+For Nix/NixOS users managing their dotfiles with Home Manager:
+
+**Zsh:**
+```nix
+# Ensure XDG directories are in fpath
+programs.zsh.initContent = ''
+  fpath=($HOME/.local/share/zsh/site-functions $fpath)
+  autoload -Uz compinit && compinit
+'';
+```
+
+**Bash:**
+Most bash configurations automatically load from `~/.local/share/bash-completion/completions/`, but if needed:
+```nix
+programs.bash.initExtra = ''
+  [[ -f ~/.local/share/bash-completion/completions/workspace ]] && \
+    source ~/.local/share/bash-completion/completions/workspace
+'';
+```
+
+#### Usage Examples
+
+Once installed, you can use tab completion with the workspace command:
+
+```bash
+# Complete command names
+workspace <TAB>
+# Shows: switch sync status foreach list clean config repair install-completion help
+
+# Complete workspace names for switch
+workspace switch <TAB>
+# Shows: main develop feature-x (existing workspaces)
+
+# Complete workspace names for sync
+workspace sync <TAB>
+# Shows: main develop feature-x (existing workspaces)
+
+# Complete config subcommands
+workspace config <TAB>
+# Shows: set-default set show help
+
+# Complete repository names for config set
+workspace config set feature-x <TAB>
+# Shows: core utils docs (repository names from template)
+
+# Complete commands for foreach
+workspace foreach <TAB>
+# Shows: existing workspaces or commands
+
+# Chain completions
+workspace config set feature-x core <TAB>
+# Shows: main master develop (branch suggestions)
+```
+
+#### Completion Details
+
+**Bash Completion:**
+- Command completion for all workspace subcommands
+- Workspace name completion where applicable
+- Repository name extraction from git config
+- Common branch name suggestions
+- Config subcommand completion
+- Contextual hints showing what values are expected
+
+**Zsh Completion:**
+- All bash features plus:
+- Descriptive help for each command
+- Better integration with zsh's completion system
+- Alternative suggestions (e.g., existing workspaces vs branch names)
+- Context-aware command completion for `foreach`
+
+#### Testing Completions
+
+To verify completion is working correctly:
+
+```bash
+# Run the test script
+./test-completion.sh
+```
+
+This will check that:
+- Completion files exist
+- They load without errors
+- Functions are properly defined
+- All commands are documented
+
+#### Troubleshooting
+
+**Bash:**
+If completion doesn't work:
+1. Ensure bash-completion package is installed
+2. Check that the completion file is sourced: `complete -p workspace`
+3. Verify the path in your .bashrc is correct
+
+**Zsh:**
+If completion doesn't work:
+1. Ensure compinit is called in your .zshrc
+2. Check fpath includes the completion directory: `echo $fpath`
+3. Try running `compinit` manually
+4. Remove cached completions: `rm ~/.zcompdump*`
+
+#### Contributing
+
+To modify the completion scripts:
+- `workspace-completion.bash` - Bash completion logic
+- `workspace-completion.zsh` - Zsh completion logic
+- Update both scripts when adding new commands or options
+- Test changes with `test-completion.sh`
 
 ## Use Cases & Workflows
 
 ### 1. **Feature Development**
 ```bash
 # Start new feature
-./workspace init feature-user-auth
+./workspace switch feature-user-auth
 cd worktrees/feature-user-auth
 
 # Work across repositories
@@ -249,7 +506,7 @@ cd worktrees/feature-user-auth
 ### 2. **Release Management**
 ```bash
 # Create release workspace
-./workspace init release-v2.0
+./workspace switch release-v2.0
 cd worktrees/release-v2.0
 
 # Prepare release
@@ -263,40 +520,57 @@ cd worktrees/release-v2.0
 ```
 
 ### 3. **Dependency Management**
-Update `workspace.conf` to pin a new version:
+Update template configuration to pin a new version:
 ```bash
-# Before
-https://github.com/vendor/sdk.git main v1.0.0
-
-# After  
-https://github.com/vendor/sdk.git main v1.2.0
+# Update template with new version
+./workspace config set-default https://github.com/vendor/sdk.git main v1.2.0
 ```
 
-Then reinitialize workspaces:
+Then recreate workspaces:
 ```bash
 ./workspace clean main
-./workspace init main
+./workspace switch main
 ```
 
 ### 4. **Parallel Development**
 ```bash
 # Multiple developers, multiple features
-./workspace init feature-payments
-./workspace init feature-notifications  
-./workspace init hotfix-security
+./workspace switch feature-payments
+./workspace switch feature-notifications  
+./workspace switch hotfix-security
 
 # Each workspace is completely isolated
 ./workspace status  # See all active workspaces
 ```
 
-### 5. **CI/CD Integration**
+### 5. **Per-Workspace Repository Configuration**
+```bash
+# Scenario: Testing a feature that spans specific repos
+# while keeping others on stable branches
+
+# Set up main workspace with stable versions
+./workspace config set main https://github.com/org/app.git main
+./workspace config set main https://github.com/org/backend.git main  
+./workspace config set main https://github.com/org/database.git main v3.0.0
+
+# Set up feature workspace with mixed branches
+./workspace config set feature-api https://github.com/org/app.git main
+./workspace config set feature-api https://github.com/org/backend.git feature-api-v2
+./workspace config set feature-api https://github.com/org/database.git main v3.0.0
+
+# Each workspace maintains its own configuration
+./workspace switch main          # Uses main branches
+./workspace switch feature-api   # Uses feature branch for backend only
+```
+
+### 6. **CI/CD Integration**
 ```bash
 #!/bin/bash
 # ci-build.sh
 set -e
 
-# Initialize workspace for current branch
-./workspace init "$GITHUB_REF_NAME"
+# Switch to workspace for current branch
+./workspace switch "$GITHUB_REF_NAME"
 cd "worktrees/$GITHUB_REF_NAME"
 
 # Build everything
@@ -306,9 +580,9 @@ cd "worktrees/$GITHUB_REF_NAME"
 ## Expected Behaviors
 
 ### Repository Cloning
-- **Branch exists remotely**: Clones specific branch directly
-- **Branch doesn't exist**: Clones default branch, then creates local branch
-- **Pinned repository**: Always clones specified branch, then checks out ref
+- **Branch exists remotely**: Creates worktree for specific branch directly
+- **Branch doesn't exist**: Creates worktree from default branch, then creates local branch
+- **Pinned repository**: Always creates worktree for specified branch, then checks out ref
 
 ### Synchronization
 - **Branch-tracking repos**: Updated with `git pull --ff-only`
@@ -318,7 +592,7 @@ cd "worktrees/$GITHUB_REF_NAME"
 
 ### Error Handling
 - **Missing config file**: Creates empty workspace
-- **Invalid git URL**: Clone fails, error reported
+- **Invalid git URL**: Worktree creation fails, error reported
 - **Network issues**: Operation fails with git error message
 - **Permission issues**: Fails with appropriate error
 
@@ -332,16 +606,15 @@ cd "worktrees/$GITHUB_REF_NAME"
 
 ### Mixed Repository Types
 ```bash
-# workspace.conf
-# Core app repos - track workspace branches
-git@github.com:org/frontend.git
-git@github.com:org/backend.git
+# Template configuration (replaces workspace.conf)
+./workspace config set-default git@github.com:org/frontend.git
+./workspace config set-default git@github.com:org/backend.git
 
 # Shared library - always use main branch
-git@github.com:org/shared-components.git main
+./workspace config set-default git@github.com:org/shared-components.git main
 
 # Third-party - pinned version
-https://github.com/vendor/ui-kit.git v2 v2.1.0
+./workspace config set-default https://github.com/vendor/ui-kit.git v2 v2.1.0
 ```
 
 ### Branch-Specific Dependencies
@@ -356,16 +629,18 @@ https://github.com/vendor/sdk.git main v1.0.0
 
 Use with:
 ```bash
-CONFIG_FILE=workspace-dev.conf ./workspace init develop
+CONFIG_FILE=workspace-dev.conf ./workspace switch develop
 ```
 
 ## Migration from Git Submodules
 
 ### 1. Extract Current Configuration
 ```bash
-# Generate workspace.conf from .gitmodules
-git config -f .gitmodules --get-regexp '^submodule\..*\.(path|url)$' | \
-  awk '{ if ($1 ~ /\.url$/) print $2 }' > workspace.conf
+# Extract repository URLs from .gitmodules and set up templates
+git config -f .gitmodules --get-regexp '^submodule\..*\.url$' | \
+  awk '{ print $2 }' | while read url; do
+    ./workspace config set-default "$url"
+  done
 ```
 
 ### 2. Remove Submodules
@@ -374,7 +649,7 @@ git config -f .gitmodules --get-regexp '^submodule\..*\.(path|url)$' | \
 git rm .gitmodules
 rm -rf .git/modules/
 
-# Remove submodule directories (they'll be recreated as regular clones)
+# Remove submodule directories (they'll be recreated as worktrees)
 git submodule deinit --all
 git submodule | cut -d' ' -f3 | xargs rm -rf
 
@@ -385,7 +660,7 @@ git commit -m "Migrate from submodules to wt-super"
 
 ### 3. Start Using wt-super
 ```bash
-./workspace init main
+./workspace switch main
 # Your repositories are now managed by wt-super!
 ```
 
@@ -405,7 +680,7 @@ git commit -m "Migrate from submodules to wt-super"
 
 ### Common Issues
 
-**"Repository not found" during clone:**
+**"Repository not found" during worktree creation:**
 - Check URL format and access permissions
 - Verify SSH keys are configured for private repositories
 
@@ -424,7 +699,7 @@ git commit -m "Migrate from submodules to wt-super"
 Run with verbose output:
 ```bash
 set -x
-./workspace init feature-test
+./workspace switch feature-test
 set +x
 ```
 
@@ -436,6 +711,18 @@ See [README_TESTING.md](README_TESTING.md) for comprehensive test suite document
 ```bash
 uv run --extra test pytest  # Runs all tests (100+) with enhanced output
 ```
+
+**Using Nix:**
+If you have Nix available (common on NixOS, but works anywhere Nix is installed), you can use this approach to avoid UV's Python download issues:
+```bash
+# Run tests with Nix-provided Python and parallel execution
+nix-shell -p python312 uv bash git --run "UV_PYTHON_DOWNLOADS=never uv run --extra test pytest -n auto"
+
+# Or for non-parallel execution
+nix-shell -p python312 uv bash git --run "UV_PYTHON_DOWNLOADS=never uv run --extra test pytest"
+```
+
+This forces UV to use Nix's properly-linked Python while maintaining UV's dependency management.
 
 **Enhanced Test Output:**
 This project uses `pytest-rich` for improved test output featuring:
@@ -475,6 +762,9 @@ uv run --extra test pytest -m "slow"
 
 # Only network tests (may prompt for credentials - requires internet)
 uv run --extra test pytest -m "network"
+
+# Nix equivalents (add parallel execution with -n auto)
+nix-shell -p python312 uv bash git --run "UV_PYTHON_DOWNLOADS=never uv run --extra test pytest -m 'not network' -n auto"
 
 # All tests including network (use with caution - may prompt for credentials)
 uv run --extra test pytest
