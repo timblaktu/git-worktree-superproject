@@ -29,7 +29,7 @@
 - **Rust**: Production-ready AST-based Nix flake modification (`flake-input-modifier/`)
 - **Python**: Comprehensive pytest test suite (728+ tests in `test/`)
 
-**Migration Status**: ✅ Phase 1 COMPLETE | ✅ Phase 2 MOSTLY COMPLETE (Priorities 0-2 done) | ⏳ Phase 3 PENDING (test migration)
+**Migration Status**: ✅ Phase 1 COMPLETE | ✅ Phase 2 COMPLETE (All priorities done) | 🚀 Phase 3 READY (test migration)
 
 ## 🔧 **IMPORTANT PATHS**
 
@@ -72,10 +72,12 @@
 - ✅ Full workflow: read → AST modify → write
 - ✅ End-to-end tested with complex flakes
 
-**Priority 3: Configuration Management** - OPTIONAL REFINEMENT
-- ✅ Basic configuration system working (cmd_init, Config::detect)
-- ✅ Tilde expansion fixed
-- 🔄 Optional enhancements: interactive wizard, validation, per-repo configs
+**Priority 3: Configuration Management** - ✅ COMPLETE
+- ✅ Git config integration (workspace.repo multi-value config)
+- ✅ 3-tier inheritance chain (worktree → default → legacy)
+- ✅ Full CLI commands (show, set, set-default, import)
+- ✅ Worktree config extension support
+- ✅ Import from workspace.conf files
 
 #### **Phase 3: Testing and Polish** (FUTURE)  
 - Migrate Python tests to native Rust testing
@@ -116,32 +118,55 @@ Plan integration of existing Rust AST system into new unified project.
 - **Single-User Optimization**: No need for complex configuration compatibility
 - **Test Migration**: Gradual migration of Python tests to native Rust tests
 
-## 📋 **CURRENT TASKS** (2025-11-02 - Session 4: Safety Review)
+## 📋 **CURRENT TASKS** (2025-11-02 - Session 5: Configuration Management)
 
-**Status**: 🔒 SAFETY REVIEW COMPLETE - All tests verified safe, guidelines updated
+**Status**: ✅ PHASE 2 PRIORITY 3 COMPLETE - Full config system with git config integration
 
-✅ **CRITICAL ISSUES RESOLVED**:
-1. ✅ Tilde expansion in config paths (Priority 0)
-2. ✅ Nix flake integration complete (Priority 2)
-3. ✅ Test safety verification (Session 4)
+✅ **ALL PHASE 2 PRIORITIES COMPLETE**:
+1. ✅ Tilde expansion in config paths (Priority 0 - Session 3)
+2. ✅ Complete worktree operations (Priority 1 - Session 2)
+3. ✅ Nix flake integration (Priority 2 - Session 3)
+4. ✅ Configuration management system (Priority 3 - Session 5) **← NEW**
 
-**Completed This Session (Session 4 - Safety Review)**:
-- [x] ✅ Critical safety concern raised by user about ~ directory
-- [x] ✅ Analyzed all 6 tests in workspace-manager - ALL SAFE:
-  - test_expand_tilde: String-only, no file I/O
-  - test_create_and_remove_dir: Uses tempdir()
-  - test_config_round_trip: Uses tempdir()
-  - test_open_repository: Read-only git ops
-  - test_list_branches: Read-only git ops
-  - test_current_branch: Read-only git ops
-- [x] ✅ Verified NO tests operate on literal `~` directory
-- [x] ✅ Confirmed literal `~` dir created by OLD buggy code (before commit 6af5385)
-- [x] ✅ Current code is safe (tilde expansion working correctly)
-- [x] ✅ Added comprehensive TEST SAFETY RULES to CLAUDE.md
-- [x] ✅ Documented why test_expand_tilde() needs to test "~" strings
-- [x] ✅ Updated task documentation for safety-first approach
+**Completed This Session (Session 5 - Configuration Management)**:
+- [x] ✅ Analyzed Python config test suite (60+ tests across 3 files)
+- [x] ✅ Designed git config integration architecture (3-tier inheritance)
+- [x] ✅ Implemented git config operations in GitOps (67 lines):
+  - config_get_all(): Multi-value config reading
+  - config_add(): Multi-value config writing
+  - config_set(): Single-value config setting
+  - config_unset_all(): Config removal
+  - enable_worktree_config(): Extension enablement
+  - is_worktree_config_enabled(): Extension checking
+- [x] ✅ Added Config subcommand to CLI with 4 subcommands:
+  - show: Display config with inheritance chain (60 lines)
+  - set: Set worktree-specific config (49 lines)
+  - set-default: Set superproject default config (27 lines)
+  - import: Import from workspace.conf (58 lines)
+- [x] ✅ Implemented 3-tier configuration inheritance:
+  1. Worktree-specific (git config --worktree workspace.repo)
+  2. Default (git config workspace.repo in superproject)
+  3. Legacy workspace.conf file
+- [x] ✅ All tests passing (cargo check ✅, cargo test ✅)
+- [x] ✅ End-to-end testing:
+  - workspace config show main ✅
+  - workspace config set-default <url> <branch> ✅
+  - Inheritance chain verified (default overrides legacy) ✅
+- [x] ✅ Committed implementation (commit: 524a951)
+
+**Code Changes Session 5**:
+- workspace-manager/src/git.rs: +67 lines (git config integration)
+- workspace-manager/src/cli.rs: +277 lines (config commands + CLI subcommand structure)
+- Total: +344 lines of production code
+- 1 commit: feature (524a951) - Phase 2 Priority 3 complete
 
 **Previous Sessions Completed**:
+
+**Session 4 - Safety Review**:
+- [x] ✅ Critical safety concern raised by user about ~ directory
+- [x] ✅ Analyzed all 6 tests - ALL SAFE (tempdir or read-only)
+- [x] ✅ Verified NO tests operate on literal `~` directory
+- [x] ✅ Added comprehensive TEST SAFETY RULES to CLAUDE.md
 
 **Session 3**:
 - [x] ✅ Fixed tilde expansion bug in config paths (workspace-manager/src/config.rs)
@@ -176,12 +201,14 @@ Plan integration of existing Rust AST system into new unified project.
 
 **Build Status**: ✅ cargo check passes | ✅ cargo test passes (9 tests)
 
-**Phase 2 Priority Tasks**:
+**Phase 2 Priority Tasks**: ✅ **ALL COMPLETE**
 1. [x] **PRIORITY 1**: Complete worktree operations - ✅ COMPLETE (Session 2)
 2. [x] **PRIORITY 0**: Fix tilde expansion in config paths - ✅ COMPLETE (Session 3)
 3. [x] **PRIORITY 2**: Integrate flake-input-modifier API into cmd_flake - ✅ COMPLETE (Session 3)
-4. [ ] **PRIORITY 3**: Implement configuration management enhancements - NEXT
-5. [ ] **ONGOING**: Begin migrating Python tests to Rust
+4. [x] **PRIORITY 3**: Configuration management with git config - ✅ COMPLETE (Session 5)
+
+**Next Phase**:
+5. [ ] **PHASE 3**: Begin migrating Python tests to Rust (728+ tests)
 
 ⚠️ **CLEANUP TASK** (Safe to do manually):
 - Leftover buggy directory: `/home/tim/src/git-worktree-superproject/~` (literal tilde name)
@@ -193,27 +220,47 @@ Plan integration of existing Rust AST system into new unified project.
 
 **Quick Resume Command**: "Begin work on your top-priority task"
 
-**Expected Action**: Choose between Phase 2 Priority 3 OR Phase 3
-- **Option A**: Phase 2 Priority 3 - Configuration Management Enhancements
-  - Implement per-workspace git config storage (HIGH priority from test analysis)
-  - Review current cmd_init implementation (workspace-manager/src/cli.rs:160-207)
-  - Python tests show 60+ tests for config management (test_config.py, test_per_workspace_config.py)
-  - Add configuration display/management commands (config show, config import)
+**Expected Action**: **Phase 3 - Begin Python Test Migration**
 
-- **Option B**: Phase 3 - Begin Python Test Migration
-  - 728+ Python tests to migrate to native Rust
-  - Start with core functionality tests (worktree operations, config management)
-  - More comprehensive validation approach
-  - Session 4 provided detailed test analysis to guide migration
+✅ **Phase 2 is COMPLETE!** All priorities finished:
+- ✅ Phase 1: Core infrastructure (Sessions 1-2)
+- ✅ Phase 2 Priority 0: Tilde expansion fix (Session 3)
+- ✅ Phase 2 Priority 1: Complete worktree operations (Session 2)
+- ✅ Phase 2 Priority 2: Nix flake integration (Session 3)
+- ✅ Phase 2 Priority 3: Configuration management (Session 5)
 
-**Current Focus**: Safety-first development established, ready for next feature work
-**Strategic Goal**: Complete unified workspace manager with robust configuration
+**Phase 3 Strategy - Python Test Migration:**
+1. **Start with Config Tests** (60+ tests, well-structured):
+   - test_config.py (8 tests): Basic config parsing
+   - test_per_workspace_config.py (11 tests): Git config system
+   - test_config_errors.py (21 tests): Error handling
+   - Foundation for other test categories
+
+2. **Then Worktree Operations Tests** (34+ tests):
+   - test_worktree_operations.py (17 tests): Lifecycle tests
+   - test_workspace.py (33 tests): Core workspace ops
+   - Already have working implementation to validate against
+
+3. **Integration & Edge Cases** (53+ tests):
+   - test_integration_workflows.py (10 tests)
+   - test_workspace_advanced.py (17 tests)
+   - test_superproject_edge_cases.py (12 tests)
+   - Real-world scenario validation
+
+**Test Migration Approach:**
+- Use tempdir() for all file I/O tests (safety first)
+- Follow existing test patterns from workspace-manager/src/*_tests.rs
+- Port test logic, not bash script invocations
+- Add tests to appropriate module files (config, git, fs)
+
+**Current Focus**: Phase 2 complete, transition to Phase 3
+**Strategic Goal**: Migrate 728+ Python tests to native Rust for unified testing
 **Migration Progress**:
-  - ✅ Core infrastructure (Phase 1)
-  - ✅ Worktree lifecycle (Phase 2 Priority 1)
-  - ✅ Nix flake integration (Phase 2 Priority 2)
-  - 🔄 Configuration enhancements (Phase 2 Priority 3) - Optional refinement
-  - ⏳ Test migration (Phase 3) - Major remaining work
+  - ✅ Core infrastructure (Phase 1) - COMPLETE
+  - ✅ Worktree lifecycle (Phase 2 Priority 1) - COMPLETE
+  - ✅ Nix flake integration (Phase 2 Priority 2) - COMPLETE
+  - ✅ Configuration system (Phase 2 Priority 3) - COMPLETE
+  - 🚀 Test migration (Phase 3) - **READY TO START**
 
 **Architecture Decisions** (Locked):
 - ✅ Git Operations: libgit2-rs (not shell commands)
