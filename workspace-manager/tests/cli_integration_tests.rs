@@ -735,17 +735,12 @@ fn test_config_show_default_config() {
 fn test_config_set_workspace_specific() {
     let fixture = CliTestFixture::new();
 
-    // Create a workspace
-    let mut cmd_switch = fixture.workspace_cmd();
-    cmd_switch
-        .args([
-            "switch",
-            "test-workspace",
-            "--config-file",
-            fixture.config_path.to_str().unwrap(),
-        ])
+    // Create a git worktree using 'workspace add' (config commands require git worktrees)
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "test-workspace", "--branch", "feature"])
         .current_dir(fixture.path());
-    cmd_switch.assert().success();
+    cmd_add.assert().success();
 
     // Set workspace-specific config
     let mut cmd_set = fixture.workspace_cmd();
@@ -783,17 +778,12 @@ fn test_config_set_workspace_specific() {
 fn test_config_set_with_git_ref() {
     let fixture = CliTestFixture::new();
 
-    // Create a workspace
-    let mut cmd_switch = fixture.workspace_cmd();
-    cmd_switch
-        .args([
-            "switch",
-            "test-workspace",
-            "--config-file",
-            fixture.config_path.to_str().unwrap(),
-        ])
+    // Create a git worktree using 'workspace add' (config commands require git worktrees)
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "test-workspace", "--branch", "test-branch"])
         .current_dir(fixture.path());
-    cmd_switch.assert().success();
+    cmd_add.assert().success();
 
     // Set config with git ref
     let mut cmd_set = fixture.workspace_cmd();
@@ -900,11 +890,7 @@ fn test_config_set_default_with_ref() {
 fn test_config_import_from_file() {
     let fixture = CliTestFixture::new();
 
-    // Create a new workspace
-    let workspace_path = fixture.path().join(".worktrees").join("import-test");
-    fs::create_dir_all(&workspace_path).expect("Failed to create workspace dir");
-
-    // Import config from workspace.conf
+    // Import config will create the worktree automatically if it doesn't exist
     let mut cmd_import = fixture.workspace_cmd();
     cmd_import
         .args([
@@ -920,6 +906,13 @@ fn test_config_import_from_file() {
         .success()
         .stdout(predicate::str::contains("Importing configuration"))
         .stdout(predicate::str::contains("Import complete"));
+
+    // Verify worktree was created
+    let workspace_path = fixture.path().join(".worktrees").join("import-test");
+    assert!(
+        workspace_path.exists(),
+        "Worktree should be created by import"
+    );
 }
 
 #[test]
@@ -980,17 +973,12 @@ fn test_config_import_fails_for_missing_file() {
 fn test_config_inheritance_workspace_overrides_default() {
     let fixture = CliTestFixture::new();
 
-    // Create a workspace
-    let mut cmd_switch = fixture.workspace_cmd();
-    cmd_switch
-        .args([
-            "switch",
-            "test-workspace",
-            "--config-file",
-            fixture.config_path.to_str().unwrap(),
-        ])
+    // Create a git worktree using 'workspace add' (config commands require git worktrees)
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "test-workspace", "--branch", "test-branch"])
         .current_dir(fixture.path());
-    cmd_switch.assert().success();
+    cmd_add.assert().success();
 
     // Set default config
     let mut cmd_set_default = fixture.workspace_cmd();
@@ -1052,17 +1040,12 @@ fn test_config_show_help() {
 fn test_config_multiple_repositories_in_workspace() {
     let fixture = CliTestFixture::new();
 
-    // Create a workspace
-    let mut cmd_switch = fixture.workspace_cmd();
-    cmd_switch
-        .args([
-            "switch",
-            "multi-repo-workspace",
-            "--config-file",
-            fixture.config_path.to_str().unwrap(),
-        ])
+    // Create a git worktree using 'workspace add' (config commands require git worktrees)
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "multi-repo-workspace", "--branch", "multi-branch"])
         .current_dir(fixture.path());
-    cmd_switch.assert().success();
+    cmd_add.assert().success();
 
     // Set multiple repo configs
     let repos = vec![

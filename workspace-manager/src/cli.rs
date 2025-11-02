@@ -808,6 +808,13 @@ fn cmd_config_import(config: Config, workspace: String, source_file: PathBuf) ->
     // Check if workspace exists, if not create it
     if !worktree_path.exists() || !git.has_worktree(&workspace) {
         info!("Workspace '{}' does not exist, creating it", workspace);
+
+        // Create parent directory if needed
+        if let Some(parent) = worktree_path.parent() {
+            std::fs::create_dir_all(parent)?;
+            info!("Created parent directory: {}", parent.display());
+        }
+
         git.add_worktree(
             &workspace,
             &worktree_path,
