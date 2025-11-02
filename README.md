@@ -68,9 +68,9 @@ cd worktrees/main
 echo "worktrees/" >> .gitignore
 ```
 
-## ⚡ Nix Flake Integration (Industry First)
+## ⚡ Nix Flake Integration
 
-**wt-super** features groundbreaking integration with Nix flakes, enabling **surgical precision** modification of flake input URLs while preserving perfect structure. This is the **first tool in the industry** to combine git worktree multi-repository management with AST-based Nix flake modification.
+**wt-super** includes integration with Nix flakes, enabling precise modification of flake input URLs while preserving file structure. The tool combines git worktree multi-repository management with AST-based Nix flake modification.
 
 ### 🎯 **The Multi-Context Development Problem**
 
@@ -81,19 +81,19 @@ When developing with multiple Nix repositories (nixpkgs, home-manager, etc.), yo
 - **Manual Switching**: Editing flake.nix by hand is error-prone and tedious
 - **Structure Loss**: sed/awk approaches destroy formatting, comments, and whitespace
 
-### 🚀 **The wt-super Solution: AST-Based Precision**
+### 🚀 **The wt-super Solution: AST-Based Modification**
 
-wt-super automatically detects Nix flake projects and provides **surgical input URL modification**:
+wt-super automatically detects Nix flake projects and provides precise input URL modification:
 
 ```nix
 # Before (fork development)
 inputs.nixpkgs.url = "git+file:///home/user/src/nixpkgs?ref=feature-branch";
 
-# After (upstream switching) - PERFECT structure preservation
+# After (upstream switching) - structure preservation
 inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 ```
 
-**All formatting, comments, and whitespace perfectly preserved!**
+All formatting, comments, and whitespace are preserved during modification.
 
 ### 🔧 **Flake-Aware Commands**
 
@@ -119,8 +119,8 @@ When wt-super detects a `flake.nix` file in your superproject, it automatically 
 ### 📊 **Technical Implementation**
 
 #### **AST-Based Modification Engine**
-- **Perfect preservation**: Comments, whitespace, formatting unchanged
-- **Surgical precision**: Only target URLs modified
+- **Structure preservation**: Comments, whitespace, formatting unchanged
+- **Targeted modification**: Only specified URLs modified
 - **Performance**: Sub-100ms processing for complex flakes
 - **Error resilience**: Graceful fallback to text processing when needed
 
@@ -175,19 +175,19 @@ nix run home-manager -- switch --flake .  # Uses your development forks
 ### ⚡ **Performance & Validation**
 
 - **Speed**: Sub-100ms flake modification for complex structures (2000+ lines)
-- **Accuracy**: 41 comprehensive tests covering all real-world patterns
+- **Testing**: 41 comprehensive tests covering real-world patterns
 - **Safety**: Automatic backup and validation before modification
 - **Compatibility**: Graceful fallback when AST tool unavailable
 
-### 🏆 **Industry Impact**
+### 🎯 **Use Cases**
 
-This is the **first tool** to solve the multi-context Nix development friction with:
-- Zero manual flake.nix editing
-- Perfect structure preservation  
+The tool addresses multi-context Nix development needs:
+- Automated flake.nix editing
+- Structure preservation during modifications
 - Multi-repository coordination
-- Production-grade reliability
+- Development workflow optimization
 
-**Perfect for**: Nix package developers, NixOS contributors, home-manager users, and anyone managing multiple Nix repositories simultaneously.
+**Suitable for**: Nix package developers, NixOS contributors, home-manager users, and teams managing multiple Nix repositories.
 
 ## Directory Structure
 

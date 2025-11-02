@@ -1,15 +1,15 @@
 # Performance Benchmarks: AST vs Text Processing
 
-> **Comprehensive benchmarks demonstrating the performance and quality advantages of AST-based flake input modification**
+> **Benchmarks comparing AST-based and text-based flake input modification approaches**
 
 ## Executive Summary
 
-The AST-based approach provides **superior quality** with **competitive performance**:
+The AST-based approach provides improved quality with acceptable performance characteristics:
 
-- ✅ **Perfect structure preservation** (100% formatting retention)
+- ✅ **Structure preservation** (100% formatting retention)
 - ✅ **Sub-100ms performance** for complex flakes (2000+ lines)
-- ✅ **Zero syntax errors** vs 15-20% error rate with text processing
-- ✅ **Production reliability** with comprehensive fallback mechanisms
+- ✅ **Low error rates** vs 15-20% error rate with text processing
+- ✅ **Reliable operation** with comprehensive fallback mechanisms
 
 ## Benchmark Setup
 
@@ -153,7 +153,7 @@ sys     0m0.001s
 }
 ```
 
-**Analysis**: ✅ **PERFECT** - Comments, whitespace, formatting identical
+**Analysis**: ✅ **Complete preservation** - Comments, whitespace, formatting identical
 
 #### sed Result (Structure Loss)
 ```nix
@@ -186,7 +186,7 @@ sys     0m0.001s
 }
 ```
 
-**Analysis**: ❌ **PARTIAL** - Only simple format URLs replaced, complex format missed
+**Analysis**: ❌ **Incomplete** - Only simple format URLs replaced, complex format missed
 
 ### Error Rate Analysis
 
@@ -270,7 +270,7 @@ cd worktrees/upstream                   # Context ready
 | **sed/awk** | 60s | 20 min | 30 min | **50 min** |
 | **AST wt-super** | 3s | 1 min | 0 min | **1 min** |
 
-**Time savings**: 89 minutes per week (98.9% reduction)
+**Time savings**: 89 minutes per week (significant efficiency improvement)
 
 ## Scalability Analysis
 
@@ -315,7 +315,7 @@ Reliability:
 | 10KB | 4.1MB | 0.5MB | 8x memory, 22x time |
 | 25KB | 7.9MB | 1.1MB | 7x memory, 25x time |
 
-**Analysis**: Memory usage scales sublinearly, performance gap decreases with larger files
+**Analysis**: Memory usage scales reasonably, performance gap decreases with larger files
 
 ## Benchmark Reproducibility
 
@@ -446,31 +446,31 @@ rm -f small.nix large.nix ast_result.nix sed_result.nix
 
 ### Performance Summary
 
-The AST-based approach provides **acceptable performance overhead** (15-25x slower than sed) in exchange for **perfect reliability and structure preservation**. Given that:
+The AST-based approach provides acceptable performance overhead (15-25x slower than sed) in exchange for reliable operation and structure preservation. Given that:
 
 1. **Absolute times are small** (sub-100ms for most flakes)
 2. **Context switching is infrequent** (not a hot path)  
-3. **Perfect reliability eliminates debugging time**
+3. **Reliable operation eliminates debugging time**
 4. **Structure preservation maintains code quality**
 
-The performance trade-off is **highly favorable** for development workflows.
+The performance trade-off is favorable for development workflows.
 
 ### Quality Summary
 
-AST modification provides **100% reliability** versus **60-85% success rates** for text processing approaches, eliminating:
+AST modification provides high reliability (100% in testing) versus 60-85% success rates for text processing approaches, eliminating:
 
 - Manual cleanup after failed text modifications
 - Syntax error debugging
 - Lost formatting and comments  
 - Partial update detection and correction
 
-### Strategic Impact
+### Technical Summary
 
-This benchmarking demonstrates that **wt-super's AST integration** achieves the **industry-first** combination of:
+This benchmarking demonstrates that wt-super's AST integration provides:
 
-- ✅ **Production-grade reliability** (0% error rate)
-- ✅ **Perfect structure preservation** (100% formatting retention)  
+- ✅ **Reliable operation** (0% error rate in testing)
+- ✅ **Structure preservation** (100% formatting retention)  
 - ✅ **Acceptable performance** (sub-100ms for real-world flakes)
 - ✅ **Comprehensive fallback** (graceful degradation to text processing)
 
-**Result**: Eliminates the multi-context development friction that has historically plagued Nix ecosystem development workflows.
+**Result**: Addresses multi-context development friction in Nix ecosystem workflows.
