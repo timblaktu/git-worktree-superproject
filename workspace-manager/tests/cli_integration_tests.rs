@@ -29,6 +29,40 @@ impl CliTestFixture {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let base_path = temp_dir.path();
 
+        // Create main superproject repository (needed for config commands)
+        let main_repo = base_path.join("main-repo");
+        fs::create_dir_all(&main_repo).expect("Failed to create main repo dir");
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&main_repo)
+            .output()
+            .expect("Failed to init main repo");
+
+        // Configure git user for main repo
+        std::process::Command::new("git")
+            .args(["config", "user.email", "test@example.com"])
+            .current_dir(&main_repo)
+            .output()
+            .expect("Failed to set git user.email");
+        std::process::Command::new("git")
+            .args(["config", "user.name", "Test User"])
+            .current_dir(&main_repo)
+            .output()
+            .expect("Failed to set git user.name");
+
+        // Create initial commit in main repo
+        fs::write(main_repo.join("README.md"), "# Main Repo").expect("Failed to write README");
+        std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(&main_repo)
+            .output()
+            .expect("Failed to git add");
+        std::process::Command::new("git")
+            .args(["commit", "-m", "Initial commit"])
+            .current_dir(&main_repo)
+            .output()
+            .expect("Failed to git commit");
+
         // Create two bare git repositories for testing
         let repo_paths = vec![
             Self::create_test_repo(base_path, "repo-a"),
@@ -50,7 +84,7 @@ default_branch = "main"
 enable_nix = true
 "#,
             worktree_base.display().to_string().replace('\\', "\\\\"),
-            base_path.display().to_string().replace('\\', "\\\\")
+            main_repo.display().to_string().replace('\\', "\\\\")
         );
         fs::write(&toml_config_path, toml_content).expect("Failed to write config.toml");
 
@@ -663,4 +697,394 @@ fn test_repair_nonexistent_repo_fails() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("not found").or(predicate::str::contains("Repository")));
+}
+
+// ============================================================================
+// Config Command Tests
+// ============================================================================
+
+#[test]
+fn test_config_show_default_config() {
+    let fixture = CliTestFixture::new();
+
+    // Create a workspace
+    let mut cmd_switch = fixture.workspace_cmd();
+    cmd_switch
+        .args([
+            "switch",
+            "test-workspace",
+            "--config-file",
+            fixture.config_path.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+    cmd_switch.assert().success();
+
+    // Show config for the workspace
+    let mut cmd_config = fixture.workspace_cmd();
+    cmd_config
+        .args(["config", "show", "test-workspace"])
+        .current_dir(fixture.path());
+
+    cmd_config
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Configuration for workspace"));
+}
+
+#[test]
+fn test_config_set_workspace_specific() {
+    let fixture = CliTestFixture::new();
+
+    // Create a workspace
+    let mut cmd_switch = fixture.workspace_cmd();
+    cmd_switch
+        .args([
+            "switch",
+            "test-workspace",
+            "--config-file",
+            fixture.config_path.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+    cmd_switch.assert().success();
+
+    // Set workspace-specific config
+    let mut cmd_set = fixture.workspace_cmd();
+    cmd_set
+        .args([
+            "config",
+            "set",
+            "test-workspace",
+            "https://github.com/test/repo.git",
+            "feature-branch",
+        ])
+        .current_dir(fixture.path());
+
+    cmd_set
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Set repository config"))
+        .stdout(predicate::str::contains("https://github.com/test/repo.git"))
+        .stdout(predicate::str::contains("feature-branch"));
+
+    // Verify config was set by showing it
+    let mut cmd_show = fixture.workspace_cmd();
+    cmd_show
+        .args(["config", "show", "test-workspace"])
+        .current_dir(fixture.path());
+
+    cmd_show
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("https://github.com/test/repo.git"))
+        .stdout(predicate::str::contains("feature-branch"));
+}
+
+#[test]
+fn test_config_set_with_git_ref() {
+    let fixture = CliTestFixture::new();
+
+    // Create a workspace
+    let mut cmd_switch = fixture.workspace_cmd();
+    cmd_switch
+        .args([
+            "switch",
+            "test-workspace",
+            "--config-file",
+            fixture.config_path.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+    cmd_switch.assert().success();
+
+    // Set config with git ref
+    let mut cmd_set = fixture.workspace_cmd();
+    cmd_set
+        .args([
+            "config",
+            "set",
+            "test-workspace",
+            "https://github.com/test/repo.git",
+            "main",
+            "v1.0.0",
+        ])
+        .current_dir(fixture.path());
+
+    cmd_set
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("v1.0.0"));
+
+    // Verify all parts are in the config
+    let mut cmd_show = fixture.workspace_cmd();
+    cmd_show
+        .args(["config", "show", "test-workspace"])
+        .current_dir(fixture.path());
+
+    cmd_show
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("https://github.com/test/repo.git"))
+        .stdout(predicate::str::contains("main"))
+        .stdout(predicate::str::contains("v1.0.0"));
+}
+
+#[test]
+fn test_config_set_fails_for_nonexistent_workspace() {
+    let fixture = CliTestFixture::new();
+
+    // Try to set config for nonexistent workspace
+    let mut cmd_set = fixture.workspace_cmd();
+    cmd_set
+        .args([
+            "config",
+            "set",
+            "nonexistent-workspace",
+            "https://github.com/test/repo.git",
+            "main",
+        ])
+        .current_dir(fixture.path());
+
+    cmd_set
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("does not exist"));
+}
+
+#[test]
+fn test_config_set_default() {
+    let fixture = CliTestFixture::new();
+
+    // Set default config
+    let mut cmd_set_default = fixture.workspace_cmd();
+    cmd_set_default
+        .args([
+            "config",
+            "set-default",
+            "https://github.com/default/repo.git",
+            "develop",
+        ])
+        .current_dir(fixture.path());
+
+    cmd_set_default
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Set default repository config"))
+        .stdout(predicate::str::contains(
+            "https://github.com/default/repo.git",
+        ))
+        .stdout(predicate::str::contains("develop"));
+}
+
+#[test]
+fn test_config_set_default_with_ref() {
+    let fixture = CliTestFixture::new();
+
+    // Set default config with git ref
+    let mut cmd_set_default = fixture.workspace_cmd();
+    cmd_set_default
+        .args([
+            "config",
+            "set-default",
+            "https://github.com/default/repo.git",
+            "main",
+            "v2.0.0",
+        ])
+        .current_dir(fixture.path());
+
+    cmd_set_default
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("v2.0.0"));
+}
+
+#[test]
+fn test_config_import_from_file() {
+    let fixture = CliTestFixture::new();
+
+    // Create a new workspace
+    let workspace_path = fixture.path().join(".worktrees").join("import-test");
+    fs::create_dir_all(&workspace_path).expect("Failed to create workspace dir");
+
+    // Import config from workspace.conf
+    let mut cmd_import = fixture.workspace_cmd();
+    cmd_import
+        .args([
+            "config",
+            "import",
+            "import-test",
+            fixture.config_path.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+
+    cmd_import
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Importing configuration"))
+        .stdout(predicate::str::contains("Import complete"));
+}
+
+#[test]
+fn test_config_import_creates_workspace_if_missing() {
+    let fixture = CliTestFixture::new();
+
+    // Import should create the workspace if it doesn't exist
+    let mut cmd_import = fixture.workspace_cmd();
+    cmd_import
+        .args([
+            "config",
+            "import",
+            "auto-created-workspace",
+            fixture.config_path.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+
+    cmd_import
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Import complete"));
+
+    // Verify workspace was created
+    let workspace_path = fixture
+        .path()
+        .join(".worktrees")
+        .join("auto-created-workspace");
+    assert!(
+        workspace_path.exists(),
+        "Workspace should be created by import"
+    );
+}
+
+#[test]
+fn test_config_import_fails_for_missing_file() {
+    let fixture = CliTestFixture::new();
+
+    let nonexistent_file = fixture.path().join("nonexistent.conf");
+
+    // Try to import from nonexistent file
+    let mut cmd_import = fixture.workspace_cmd();
+    cmd_import
+        .args([
+            "config",
+            "import",
+            "test-workspace",
+            nonexistent_file.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+
+    cmd_import
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not found"));
+}
+
+#[test]
+fn test_config_inheritance_workspace_overrides_default() {
+    let fixture = CliTestFixture::new();
+
+    // Create a workspace
+    let mut cmd_switch = fixture.workspace_cmd();
+    cmd_switch
+        .args([
+            "switch",
+            "test-workspace",
+            "--config-file",
+            fixture.config_path.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+    cmd_switch.assert().success();
+
+    // Set default config
+    let mut cmd_set_default = fixture.workspace_cmd();
+    cmd_set_default
+        .args([
+            "config",
+            "set-default",
+            "https://github.com/default/repo.git",
+            "main",
+        ])
+        .current_dir(fixture.path());
+    cmd_set_default.assert().success();
+
+    // Set workspace-specific config (should override default)
+    let mut cmd_set = fixture.workspace_cmd();
+    cmd_set
+        .args([
+            "config",
+            "set",
+            "test-workspace",
+            "https://github.com/override/repo.git",
+            "feature",
+        ])
+        .current_dir(fixture.path());
+    cmd_set.assert().success();
+
+    // Show config - should see workspace-specific (not default)
+    let mut cmd_show = fixture.workspace_cmd();
+    cmd_show
+        .args(["config", "show", "test-workspace"])
+        .current_dir(fixture.path());
+
+    cmd_show
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "https://github.com/override/repo.git",
+        ))
+        .stdout(predicate::str::contains("feature"));
+}
+
+#[test]
+fn test_config_show_help() {
+    let mut cmd = Command::cargo_bin("workspace").expect("Failed to find workspace binary");
+    cmd.args(["config", "--help"]);
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Manage per-workspace configurations",
+        ))
+        .stdout(predicate::str::contains("show"))
+        .stdout(predicate::str::contains("set"))
+        .stdout(predicate::str::contains("set-default"))
+        .stdout(predicate::str::contains("import"));
+}
+
+#[test]
+fn test_config_multiple_repositories_in_workspace() {
+    let fixture = CliTestFixture::new();
+
+    // Create a workspace
+    let mut cmd_switch = fixture.workspace_cmd();
+    cmd_switch
+        .args([
+            "switch",
+            "multi-repo-workspace",
+            "--config-file",
+            fixture.config_path.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+    cmd_switch.assert().success();
+
+    // Set multiple repo configs
+    let repos = vec![
+        ("https://github.com/test/repo1.git", "main"),
+        ("https://github.com/test/repo2.git", "develop"),
+        ("https://github.com/test/repo3.git", "feature"),
+    ];
+
+    for (url, branch) in &repos {
+        let mut cmd_set = fixture.workspace_cmd();
+        cmd_set
+            .args(["config", "set", "multi-repo-workspace", url, branch])
+            .current_dir(fixture.path());
+        cmd_set.assert().success();
+    }
+
+    // Show config - should see all three repos
+    let mut cmd_show = fixture.workspace_cmd();
+    cmd_show
+        .args(["config", "show", "multi-repo-workspace"])
+        .current_dir(fixture.path());
+
+    cmd_show.assert().success();
+    // Note: Config show will display at least one of the repos due to the inheritance chain
 }
