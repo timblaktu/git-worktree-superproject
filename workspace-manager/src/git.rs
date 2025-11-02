@@ -438,4 +438,379 @@ mod tests {
             assert!(!branch.is_empty());
         }
     }
+
+    // Helper function to create a test git repository
+    fn create_test_repo() -> (tempfile::TempDir, Repository) {
+        let tempdir = tempdir().unwrap();
+        let repo = Repository::init(tempdir.path()).unwrap();
+
+        // Configure git user for commits
+        {
+            let mut config = repo.config().unwrap();
+            config.set_str("user.name", "Test User").unwrap();
+            config.set_str("user.email", "test@example.com").unwrap();
+        }
+
+        // Create an initial commit so we have a HEAD
+        {
+            let sig = repo.signature().unwrap();
+            let tree_id = {
+                let mut index = repo.index().unwrap();
+                index.write_tree().unwrap()
+            };
+            let tree = repo.find_tree(tree_id).unwrap();
+            repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+                .unwrap();
+        }
+
+        (tempdir, repo)
+    }
+
+    #[test]
+    fn test_worktree_specific_config() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Enable worktree config extension in main repo first
+        git_ops.enable_worktree_config().unwrap();
+
+        // Create worktrees parent directory (libgit2 will create the worktree itself)
+        let worktrees_dir = _tempdir.path().join("worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree_path = worktrees_dir.join("feature");
+        git_ops
+            .add_worktree("feature", &worktree_path, Some("workspace/feature"))
+            .unwrap();
+
+        // Open the worktree repository
+        let worktree_ops = GitOps::open(&worktree_path).unwrap();
+
+        // Set worktree-specific config
+        worktree_ops
+            .worktree_config_add("workspace.repo", "https://example.com/repo feature-test")
+            .unwrap();
+
+        // Verify worktree config was set
+        let values = worktree_ops
+            .worktree_config_get_all("workspace.repo")
+            .unwrap();
+        assert_eq!(values.len(), 1);
+        assert!(values[0].contains("feature-test"));
+    }
+
+    #[test]
+    fn test_config_inheritance_chain() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Set default git config (superproject level)
+        git_ops
+            .config_add("workspace.repo", "https://example.com/repo-default develop")
+            .unwrap();
+
+        // Verify default config is readable
+        let default_values = git_ops.config_get_all("workspace.repo").unwrap();
+        assert_eq!(default_values.len(), 1);
+        assert!(default_values[0].contains("repo-default"));
+        assert!(default_values[0].contains("develop"));
+
+        // Enable worktree config extension in main repo first
+        git_ops.enable_worktree_config().unwrap();
+
+        // Create worktrees parent directory (libgit2 will create the worktree itself)
+        let worktrees_dir = _tempdir.path().join("worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree_path = worktrees_dir.join("test");
+        git_ops
+            .add_worktree("test", &worktree_path, Some("workspace/test"))
+            .unwrap();
+
+        // Open the worktree repository
+        let worktree_ops = GitOps::open(&worktree_path).unwrap();
+
+        // Set worktree-specific config (should override default)
+        worktree_ops
+            .worktree_config_add(
+                "workspace.repo",
+                "https://example.com/repo-worktree feature-test",
+            )
+            .unwrap();
+
+        // Verify worktree config overrides default
+        let worktree_values = worktree_ops
+            .worktree_config_get_all("workspace.repo")
+            .unwrap();
+        assert_eq!(worktree_values.len(), 1);
+        assert!(worktree_values[0].contains("repo-worktree"));
+        assert!(worktree_values[0].contains("feature-test"));
+
+        // Verify reading from full config includes both levels
+        let all_values = worktree_ops.config_get_all("workspace.repo").unwrap();
+        // Should see both worktree and default configs
+        assert!(all_values.len() >= 1);
+    }
+
+    #[test]
+    fn test_workspace_isolation() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Enable worktree config extension in main repo first
+        git_ops.enable_worktree_config().unwrap();
+
+        // Create worktrees parent directory (libgit2 will create the worktrees themselves)
+        let worktrees_dir = _tempdir.path().join("worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree1_path = worktrees_dir.join("workspace1");
+        let worktree2_path = worktrees_dir.join("workspace2");
+
+        git_ops
+            .add_worktree("workspace1", &worktree1_path, Some("workspace/workspace1"))
+            .unwrap();
+        git_ops
+            .add_worktree("workspace2", &worktree2_path, Some("workspace/workspace2"))
+            .unwrap();
+
+        // Open both worktrees
+        let worktree1_ops = GitOps::open(&worktree1_path).unwrap();
+        let worktree2_ops = GitOps::open(&worktree2_path).unwrap();
+
+        // Set different configs for each workspace
+        worktree1_ops
+            .worktree_config_add("workspace.repo", "https://example.com/repo-a develop")
+            .unwrap();
+        worktree2_ops
+            .worktree_config_add("workspace.repo", "https://example.com/repo-b feature-test")
+            .unwrap();
+
+        // Verify workspace1 config
+        let values1 = worktree1_ops
+            .worktree_config_get_all("workspace.repo")
+            .unwrap();
+        assert_eq!(values1.len(), 1);
+        assert!(values1[0].contains("repo-a"));
+        assert!(values1[0].contains("develop"));
+        assert!(!values1[0].contains("repo-b"));
+
+        // Verify workspace2 config
+        let values2 = worktree2_ops
+            .worktree_config_get_all("workspace.repo")
+            .unwrap();
+        assert_eq!(values2.len(), 1);
+        assert!(values2[0].contains("repo-b"));
+        assert!(values2[0].contains("feature-test"));
+        assert!(!values2[0].contains("repo-a"));
+    }
+
+    #[test]
+    fn test_enable_worktree_config_extension() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Initially should be disabled
+        assert!(!git_ops.is_worktree_config_enabled());
+
+        // Enable it
+        git_ops.enable_worktree_config().unwrap();
+
+        // Should now be enabled
+        assert!(git_ops.is_worktree_config_enabled());
+    }
+
+    #[test]
+    fn test_config_add_and_get_all() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Add multiple values
+        git_ops
+            .config_add("workspace.repo", "https://example.com/repo1 main")
+            .unwrap();
+        git_ops
+            .config_add("workspace.repo", "https://example.com/repo2 develop")
+            .unwrap();
+        git_ops
+            .config_add("workspace.repo", "https://example.com/repo3 feature v1.0.0")
+            .unwrap();
+
+        // Get all values
+        let values = git_ops.config_get_all("workspace.repo").unwrap();
+        assert_eq!(values.len(), 3);
+        assert!(values[0].contains("repo1"));
+        assert!(values[1].contains("repo2"));
+        assert!(values[2].contains("repo3"));
+        assert!(values[2].contains("v1.0.0"));
+    }
+
+    #[test]
+    fn test_config_unset_all() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Add multiple values
+        git_ops
+            .config_add("workspace.repo", "https://example.com/repo1 main")
+            .unwrap();
+        git_ops
+            .config_add("workspace.repo", "https://example.com/repo2 develop")
+            .unwrap();
+
+        // Verify they exist
+        let values = git_ops.config_get_all("workspace.repo").unwrap();
+        assert_eq!(values.len(), 2);
+
+        // Unset all
+        git_ops.config_unset_all("workspace.repo").unwrap();
+
+        // Verify they're gone
+        let values = git_ops.config_get_all("workspace.repo").unwrap();
+        assert_eq!(values.len(), 0);
+    }
+
+    #[test]
+    fn test_worktree_config_unset_all() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Enable worktree config extension in main repo first
+        git_ops.enable_worktree_config().unwrap();
+
+        // Create worktrees parent directory (libgit2 will create the worktree itself)
+        let worktrees_dir = _tempdir.path().join("worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree_path = worktrees_dir.join("test");
+        git_ops
+            .add_worktree("test", &worktree_path, Some("workspace/test"))
+            .unwrap();
+
+        // Open the worktree repository
+        let worktree_ops = GitOps::open(&worktree_path).unwrap();
+
+        // Add worktree-specific configs
+        worktree_ops
+            .worktree_config_add("workspace.repo", "https://example.com/repo1 main")
+            .unwrap();
+        worktree_ops
+            .worktree_config_add("workspace.repo", "https://example.com/repo2 develop")
+            .unwrap();
+
+        // Verify they exist
+        let values = worktree_ops
+            .worktree_config_get_all("workspace.repo")
+            .unwrap();
+        assert_eq!(values.len(), 2);
+
+        // Unset all at worktree level
+        worktree_ops
+            .worktree_config_unset_all("workspace.repo")
+            .unwrap();
+
+        // Verify they're gone
+        let values = worktree_ops
+            .worktree_config_get_all("workspace.repo")
+            .unwrap();
+        assert_eq!(values.len(), 0);
+    }
+
+    #[test]
+    fn test_worktree_config_set_single_value() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Enable worktree config extension in main repo first
+        git_ops.enable_worktree_config().unwrap();
+
+        // Create worktrees parent directory (libgit2 will create the worktree itself)
+        let worktrees_dir = _tempdir.path().join("worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree_path = worktrees_dir.join("test");
+        git_ops
+            .add_worktree("test", &worktree_path, Some("workspace/test"))
+            .unwrap();
+
+        // Open the worktree repository
+        let worktree_ops = GitOps::open(&worktree_path).unwrap();
+
+        // Set a single-value config
+        worktree_ops
+            .worktree_config_set("workspace.default", "main")
+            .unwrap();
+
+        // Verify it was set (using regular config_get_all since it's a single value)
+        let config = worktree_ops.repo.config().unwrap();
+        let value = config.get_string("workspace.default").unwrap();
+        assert_eq!(value, "main");
+    }
+
+    #[test]
+    fn test_worktree_list_and_removal() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Initially should have no worktrees (or just main)
+        let initial_worktrees = git_ops.list_worktrees().unwrap();
+
+        // Create worktrees parent directory (libgit2 will create the worktree itself)
+        let worktrees_dir = _tempdir.path().join("worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree_path = worktrees_dir.join("test");
+        git_ops
+            .add_worktree("test", &worktree_path, Some("workspace/test"))
+            .unwrap();
+
+        // Should now have one more worktree
+        let worktrees = git_ops.list_worktrees().unwrap();
+        assert_eq!(worktrees.len(), initial_worktrees.len() + 1);
+        assert!(worktrees.contains(&"test".to_string()));
+
+        // Remove the worktree
+        git_ops.remove_worktree("test").unwrap();
+
+        // Should be back to initial count
+        let final_worktrees = git_ops.list_worktrees().unwrap();
+        assert_eq!(final_worktrees.len(), initial_worktrees.len());
+        assert!(!final_worktrees.contains(&"test".to_string()));
+    }
+
+    #[test]
+    fn test_worktree_branch_creation() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Create worktrees parent directory (libgit2 will create the worktrees themselves)
+        let worktrees_dir = _tempdir.path().join("worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        // Get initial branches
+        let initial_branches = git_ops.list_branches(None).unwrap();
+
+        // Add worktree with new branch
+        let worktree_path = worktrees_dir.join("feature-x");
+        git_ops
+            .add_worktree("feature-x", &worktree_path, Some("workspace/feature-x"))
+            .unwrap();
+
+        // Should have new branch
+        let branches = git_ops.list_branches(None).unwrap();
+        assert_eq!(branches.len(), initial_branches.len() + 1);
+        assert!(branches.contains(&"workspace/feature-x".to_string()));
+
+        // Add another worktree
+        let worktree2_path = worktrees_dir.join("hotfix-y");
+        git_ops
+            .add_worktree("hotfix-y", &worktree2_path, Some("workspace/hotfix-y"))
+            .unwrap();
+
+        // Should have both branches
+        let branches = git_ops.list_branches(None).unwrap();
+        assert_eq!(branches.len(), initial_branches.len() + 2);
+        assert!(branches.contains(&"workspace/feature-x".to_string()));
+        assert!(branches.contains(&"workspace/hotfix-y".to_string()));
+    }
 }
