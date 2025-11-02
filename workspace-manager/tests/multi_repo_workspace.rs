@@ -14,7 +14,6 @@ use workspace_manager::workspace::{RepoStatus, WorkspaceManager, WorkspaceManage
 // ============================================================================
 
 #[rstest]
-#[should_panic(expected = "Phase 6: Implement workspace switch")]
 fn test_switch_creates_workspace_with_multiple_repos(
     test_workspace: TestWorkspace,
     mut test_git_repos: TestGitRepos,
@@ -64,7 +63,6 @@ fn test_switch_creates_workspace_with_multiple_repos(
 }
 
 #[rstest]
-#[should_panic(expected = "Phase 6: Implement workspace switch")]
 fn test_switch_existing_workspace_is_idempotent(
     test_workspace: TestWorkspace,
     mut test_git_repos: TestGitRepos,
@@ -94,7 +92,6 @@ fn test_switch_existing_workspace_is_idempotent(
 }
 
 #[rstest]
-#[should_panic(expected = "Phase 6: Implement workspace switch")]
 fn test_switch_with_pinned_repository(
     test_workspace: TestWorkspace,
     mut test_git_repos: TestGitRepos,
@@ -138,7 +135,6 @@ fn test_switch_with_pinned_repository(
 }
 
 #[rstest]
-#[should_panic(expected = "Phase 6: Implement workspace switch")]
 fn test_switch_with_different_branch_names(
     test_workspace: TestWorkspace,
     mut test_git_repos: TestGitRepos,
@@ -578,7 +574,6 @@ fn test_detached_head_handling(test_workspace: TestWorkspace, mut test_git_repos
 }
 
 #[rstest]
-#[should_panic(expected = "Phase 6: Implement workspace switch")]
 fn test_partial_failure_rollback(test_workspace: TestWorkspace, mut test_git_repos: TestGitRepos) {
     // Test that switch() handles partial failures gracefully
 
