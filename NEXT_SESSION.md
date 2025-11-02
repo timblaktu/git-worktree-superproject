@@ -1,20 +1,41 @@
-# NEXT SESSION PROMPT - Phase 2 Implementation
+# NEXT SESSION PROMPT - Phase 2 Priority 2: Nix Flake Integration
 
-## 📊 CURRENT STATE (2025-11-02)
+## 📊 CURRENT STATE (2025-11-02 - End of Session 2)
 
 **Branch**: `rust-migration`
-**Last Commit**: `7d7bda3` - Update CLAUDE.md with Phase 1 completion status
+**Last Commit**: `38c3a80` - Update CLAUDE.md with Phase 2 Priority 1 completion status
 **Build Status**: ✅ All systems green
 - `cargo check` ✅ Passes (4 dead code warnings expected)
 - `cargo test` ✅ 9 tests passing
 - Binary: `target/release/workspace` ✅ Working (v0.1.0)
 
 **Phase 1**: ✅ **COMPLETE** - Core infrastructure implemented and tested
+**Phase 2 Priority 1**: ✅ **COMPLETE** - Full worktree lifecycle with safety checks
 
-## 🎯 TOP PRIORITY: Phase 2 Implementation
+## ⚠️ CRITICAL ISSUES TO ADDRESS (Found in Session 2 Review)
 
-### Phase 2 Goal
-Implement advanced features and actual worktree functionality using the foundation from Phase 1.
+### Issue 1: Tilde Expansion in Config Paths - **MUST FIX BEFORE PRIORITY 2**
+**Problem**: Configuration uses literal `~/.worktrees` instead of expanding tilde
+- **Evidence**: Worktree created at `git-worktree-superproject/~/.worktrees/test-feature`
+- **Expected**: Should be `/home/tim/.worktrees/test-feature`
+- **Location**: workspace-manager/src/config.rs - Config::detect() or Config loading
+- **Fix**: Use `FileSystem::expand_tilde()` on config paths when loading
+- **Time**: 5-10 minutes
+- **Priority**: HIGH - Creates confusing directory structure
+
+### Issue 2: Remote Branches Not Implemented
+**Problem**: `workspace branches --remote` parameter unused
+- **Location**: workspace-manager/src/cli.rs:173 (_remote parameter)
+- **Priority**: LOW - Can defer to Phase 3
+
+### Issue 3: No Integration Tests
+**Problem**: Only unit tests, no CLI integration tests
+- **Priority**: MEDIUM - Should add before Phase 2 complete
+
+## 🎯 TOP PRIORITY: Phase 2 Priority 2 - Nix Flake Integration
+
+### Phase 2 Priority 2 Goal
+Integrate flake-input-modifier library API into cmd_flake for seamless Nix flake modification.
 
 ### Critical Understanding from Phase 1
 
@@ -35,38 +56,32 @@ Implement advanced features and actual worktree functionality using the foundati
 
 ## 🔧 PHASE 2 TASKS (Priority Order)
 
-### Priority 1: Complete Worktree Operations ⚡ IMMEDIATE
-**Goal**: Make `workspace add` and `workspace remove` fully functional
+### Priority 0: Fix Tilde Expansion Issue ⚠️ BLOCKING
+**Goal**: Fix config path handling before proceeding to Priority 2
 
 **Tasks**:
-1. [ ] Implement full worktree creation in `cmd_add`:
-   - Create worktree directory structure
-   - Handle branch creation/checkout properly
-   - Verify worktree is valid after creation
-   - Add error handling for edge cases
-
-2. [ ] Implement full worktree removal in `cmd_remove`:
-   - Check for uncommitted changes (unless --force)
-   - Remove worktree directory from filesystem
-   - Clean up git worktree references
-   - Handle locked worktrees
-
-3. [ ] Add `workspace list` enhancements:
-   - Show current branch for each worktree
-   - Display worktree status (clean/dirty)
-   - Add sorting options
-
-4. [ ] Test end-to-end:
-   - Create test worktree
-   - Verify filesystem structure
-   - Make commits in worktree
-   - Remove worktree cleanly
+1. [ ] Fix tilde expansion in Config::detect() (workspace-manager/src/config.rs)
+   - Apply FileSystem::expand_tilde() to worktree_base path
+   - Test with config containing ~/
+   - Verify worktrees created in correct location
 
 **Success Criteria**:
-- Can create worktree: `workspace add feature-x --branch feature-x`
-- Can list worktrees: `workspace list --detailed`
-- Can remove worktree: `workspace remove feature-x`
-- All operations reflected in both git and filesystem
+- Config with `worktree_base = "~/.worktrees"` creates worktrees at `/home/user/.worktrees/`
+- No literal `~` directories created
+
+**Time Estimate**: 10 minutes
+
+### Priority 1: Complete Worktree Operations ⚡ COMPLETE ✅
+**Status**: ✅ ALL TASKS COMPLETE (Session 2)
+
+**Completed**:
+- ✅ Full worktree creation with validation (workspace-manager/src/cli.rs:262-348)
+- ✅ Safe worktree removal with uncommitted change detection (workspace-manager/src/cli.rs:350-406)
+- ✅ Enhanced list command with branch and status info (workspace-manager/src/cli.rs:188-260)
+- ✅ End-to-end lifecycle testing verified
+- ✅ Fixed WorktreeLockStatus detection bug
+
+**Evidence**: Commit 558a903, tested successfully with real worktree operations
 
 ### Priority 2: Nix Flake Integration 🔌 HIGH
 **Goal**: Integrate existing `flake-input-modifier` library for flake operations
@@ -180,22 +195,28 @@ workspace-manager/src/
 
 ## 🚨 CRITICAL REMINDERS
 
-1. **Branch**: Stay on `rust-migration` - NEVER work on main
-2. **Commits**: Commit at logical inflection points
-3. **Testing**: Run `cargo check && cargo test` before commits
-4. **Code Quality**: Address dead code warnings as features are used
-5. **Integration**: Use existing `flake-input-modifier` API (don't rewrite)
+1. **FIRST TASK**: Fix tilde expansion issue (Priority 0) - REQUIRED before Priority 2
+2. **Branch**: Stay on `rust-migration` - NEVER work on main
+3. **Commits**: Commit at logical inflection points
+4. **Testing**: Run `cargo check && cargo test` before commits
+5. **Code Quality**: Address dead code warnings as features are used
+6. **Integration**: Use existing `flake-input-modifier` API (don't rewrite)
 
 ## 🎯 SESSION START COMMAND
 
 When resuming, respond to: **"Begin work on your top-priority task"**
 
 **Expected Response**:
-- Start with Priority 1, Task 1 (Complete worktree creation in cmd_add)
-- Create todo list with TodoWrite
-- Implement actual functionality
-- Test with real repository
-- Commit when working
+- **FIRST**: Fix tilde expansion in config paths (Priority 0 - BLOCKING)
+  - Read workspace-manager/src/config.rs
+  - Apply FileSystem::expand_tilde() to worktree_base
+  - Test with real config containing ~/
+  - Commit fix
+- **THEN**: Start Priority 2 - Nix flake integration
+  - Read flake-input-modifier API (flake-input-modifier/src/lib.rs:130-154)
+  - Implement cmd_flake using replace_flake_input_url()
+  - Test with real flake.nix
+  - Commit implementation
 
 ## 📊 METRICS FOR PHASE 2 COMPLETION
 

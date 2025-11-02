@@ -105,7 +105,8 @@ Plan integration of existing Rust AST system into new unified project.
 
 **Status**: ✅ Phase 2 Priority 1 COMPLETE - Full worktree lifecycle implemented
 
-⚠️ **FOR NEXT SESSION**: Begin Phase 2 Priority 2 - Nix flake integration
+⚠️ **CRITICAL ISSUE FOUND**: Tilde expansion in config paths - MUST FIX FIRST
+⚠️ **FOR NEXT SESSION**: Fix tilde expansion, THEN begin Phase 2 Priority 2 - Nix flake integration
 
 **Completed This Session (Session 2)**:
 - [x] ✅ Enhanced cmd_add with comprehensive validation and verification (workspace-manager/src/cli.rs:259-341)
@@ -141,22 +142,38 @@ Plan integration of existing Rust AST system into new unified project.
 
 **Phase 2 Priority Tasks**:
 1. [x] **PRIORITY 1**: Complete worktree operations - ✅ COMPLETE
-2. [ ] **PRIORITY 2**: Integrate flake-input-modifier API into cmd_flake - NEXT
-3. [ ] **PRIORITY 3**: Implement configuration management (cmd_init)
-4. [ ] **ONGOING**: Begin migrating Python tests to Rust
+2. [ ] **PRIORITY 0**: Fix tilde expansion in config paths - ⚠️ BLOCKING ISSUE (10 min fix)
+3. [ ] **PRIORITY 2**: Integrate flake-input-modifier API into cmd_flake - NEXT
+4. [ ] **PRIORITY 3**: Implement configuration management (cmd_init)
+5. [ ] **ONGOING**: Begin migrating Python tests to Rust
+
+**Critical Issue Discovered**:
+- **Problem**: Config uses literal `~/.worktrees` creating subdirectory instead of expanding to home
+- **Evidence**: Test worktree created at `git-worktree-superproject/~/.worktrees/test-feature`
+- **Expected**: Should be `/home/tim/.worktrees/test-feature`
+- **Fix**: Apply `FileSystem::expand_tilde()` in Config::detect()
+- **Priority**: HIGH - Must fix before continuing to Priority 2
 
 ## 🎯 **NEXT SESSION START**
 
 **Quick Resume Command**: "Begin work on your top-priority task"
 
-**Expected Action**: Start Phase 2 Priority 2 - Nix Flake Integration:
+**Expected Action**:
+**FIRST** - Fix tilde expansion bug (Priority 0 - BLOCKING):
+- Read workspace-manager/src/config.rs
+- Apply FileSystem::expand_tilde() to worktree_base in Config::detect()
+- Test with config containing ~/
+- Verify worktrees created in correct location
+- Commit fix
+
+**THEN** - Start Phase 2 Priority 2 - Nix Flake Integration:
 - Read flake-input-modifier API documentation (flake-input-modifier/src/lib.rs:130-154)
 - Implement cmd_flake using replace_flake_input_url() function
 - Read flake.nix from filesystem, modify, write back
 - Test with real flake.nix files
 - Commit working implementation
 
-**Current Focus**: Phase 2 Priority 2 - Nix Integration
+**Current Focus**: Priority 0 (Bugfix) THEN Phase 2 Priority 2 - Nix Integration
 **Critical Priority**: Integrate flake-input-modifier API into cmd_flake
 **Strategic Goal**: Complete unified workspace manager with Nix flake support
 **Innovation Opportunity**: Seamless worktree + flake modification workflow
