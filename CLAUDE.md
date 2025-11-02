@@ -17,7 +17,7 @@
 - **Rust**: Production-ready AST-based Nix flake modification (`flake-input-modifier/`)
 - **Python**: Comprehensive pytest test suite (728+ tests in `test/`)
 
-**Migration Status**: ✅ Phase 1 COMPLETE | 🚀 Phase 2 Priority 1 COMPLETE - Full worktree lifecycle implemented
+**Migration Status**: ✅ Phase 1 COMPLETE | ✅ Phase 2 MOSTLY COMPLETE (Priorities 0-2 done) | ⏳ Phase 3 PENDING (test migration)
 
 ## 🔧 **IMPORTANT PATHS**
 
@@ -47,20 +47,23 @@
 7. ✅ All tests passing (9 tests total across workspace)
 8. ✅ End-to-end CLI functionality verified
 
-#### **Phase 2: Advanced Features** (IN PROGRESS)
+#### **Phase 2: Advanced Features** (MOSTLY COMPLETE)
 **Priority 1: Complete Worktree Operations** - ✅ COMPLETE
 - ✅ Full worktree creation with validation and verification
 - ✅ Safe worktree removal with uncommitted change detection
 - ✅ Enhanced list command with branch and status info
 - ✅ End-to-end lifecycle testing
 
-**Priority 2: Nix Integration** - NEXT
-- Nix integration and flake operations
-- Integration with existing `flake-input-modifier` AST system
+**Priority 2: Nix Integration** - ✅ COMPLETE
+- ✅ Nix flake URL modification via cmd_flake
+- ✅ Integration with existing `flake-input-modifier` AST system
+- ✅ Full workflow: read → AST modify → write
+- ✅ End-to-end tested with complex flakes
 
-**Priority 3: Configuration Management** - PENDING
-- Repository management and state tracking
-- Configuration detection and validation
+**Priority 3: Configuration Management** - OPTIONAL REFINEMENT
+- ✅ Basic configuration system working (cmd_init, Config::detect)
+- ✅ Tilde expansion fixed
+- 🔄 Optional enhancements: interactive wizard, validation, per-repo configs
 
 #### **Phase 3: Testing and Polish** (FUTURE)  
 - Migrate Python tests to native Rust testing
@@ -101,82 +104,69 @@ Plan integration of existing Rust AST system into new unified project.
 - **Single-User Optimization**: No need for complex configuration compatibility
 - **Test Migration**: Gradual migration of Python tests to native Rust tests
 
-## 📋 **CURRENT TASKS** (2025-11-02 - Session 2 Complete)
+## 📋 **CURRENT TASKS** (2025-11-02 - Session 3 Complete)
 
-**Status**: ✅ Phase 2 Priority 1 COMPLETE - Full worktree lifecycle implemented
+**Status**: ✅ Phase 2 Priority 0-2 COMPLETE - Bugfix + Nix flake integration implemented
 
-⚠️ **CRITICAL ISSUE FOUND**: Tilde expansion in config paths - MUST FIX FIRST
-⚠️ **FOR NEXT SESSION**: Fix tilde expansion, THEN begin Phase 2 Priority 2 - Nix flake integration
+✅ **CRITICAL ISSUES RESOLVED**:
+1. ✅ Tilde expansion in config paths (Priority 0)
+2. ✅ Nix flake integration complete (Priority 2)
 
-**Completed This Session (Session 2)**:
-- [x] ✅ Enhanced cmd_add with comprehensive validation and verification (workspace-manager/src/cli.rs:259-341)
-  - Pre-creation checks: worktree name exists, path collision detection
-  - Branch existence validation with user feedback
-  - Post-creation verification: validate worktree, verify directory exists
-  - Clear success reporting with checkmarks
-- [x] ✅ Implemented safe cmd_remove with uncommitted change detection (workspace-manager/src/cli.rs:343-406)
-  - Safety checks: worktree exists, not locked, uncommitted changes
-  - Force flag support for override
-  - Filesystem directory removal
-  - Fixed libgit2 WorktreeLockStatus handling
-- [x] ✅ Enhanced cmd_list with branch and status info (workspace-manager/src/cli.rs:188-257)
-  - Detailed mode: branch name, status counts, locked/valid state
-  - Simple mode: branch names in brackets
-  - Handles missing directories and detached HEAD
-- [x] ✅ Added worktree_status() to GitOps (workspace-manager/src/git.rs:217-250)
-  - Status summary for specific worktree paths
-  - Used for safety checks in removal
-- [x] ✅ End-to-end lifecycle testing
-  - Created test worktree with new branch
-  - Added files (uncommitted changes detected)
-  - Removal blocked without force (safety check working)
-  - Force removal successful (worktree and directory removed)
-- [x] ✅ All changes committed (commit: 558a903)
+**Completed This Session (Session 3)**:
+- [x] ✅ Fixed tilde expansion bug in config paths (workspace-manager/src/config.rs)
+  - Imported FileSystem module into config
+  - Applied expand_tilde() in default_config() (line 44)
+  - Applied expand_tilde() in load() for TOML configs (lines 29-30)
+  - Handles both worktree_base and main_repo paths
+  - Verified with end-to-end test: worktree created in /home/tim/.worktrees/ ✅
+  - Committed fix (commit: 6af5385)
 
-**Code Changes**:
-- +197 lines implementing robust worktree lifecycle (workspace-manager/src/cli.rs, git.rs)
-- Fixed libgit2 WorktreeLockStatus enum handling
-- Comprehensive error messages and user feedback
+- [x] ✅ Implemented Nix flake integration (workspace-manager/src/cli.rs)
+  - Updated CLI args: added old_url parameter, changed new_url flag to -n
+  - Implemented cmd_flake() using flake_input_modifier::replace_flake_input_url()
+  - Full workflow: read flake.nix → AST modification → write back
+  - Comprehensive error handling for file I/O and AST operations
+  - End-to-end test 1: nixpkgs URL modified successfully
+  - End-to-end test 2: home-manager URL with query params (?ref=) modified
+  - Structure preservation verified (nested follows, formatting intact)
+  - Committed implementation (commit: 9d0bf9d)
+
+**Code Changes This Session**:
+- workspace-manager/src/config.rs: +9 lines (tilde expansion in configs)
+- workspace-manager/src/cli.rs: +42 lines (flake integration, CLI args update)
+- Total: +51 lines of production code
+- 2 commits: bugfix (6af5385) + feature (9d0bf9d)
 
 **Build Status**: ✅ cargo check passes | ✅ cargo test passes (9 tests)
 
 **Phase 2 Priority Tasks**:
-1. [x] **PRIORITY 1**: Complete worktree operations - ✅ COMPLETE
-2. [ ] **PRIORITY 0**: Fix tilde expansion in config paths - ⚠️ BLOCKING ISSUE (10 min fix)
-3. [ ] **PRIORITY 2**: Integrate flake-input-modifier API into cmd_flake - NEXT
-4. [ ] **PRIORITY 3**: Implement configuration management (cmd_init)
+1. [x] **PRIORITY 1**: Complete worktree operations - ✅ COMPLETE (Session 2)
+2. [x] **PRIORITY 0**: Fix tilde expansion in config paths - ✅ COMPLETE (Session 3)
+3. [x] **PRIORITY 2**: Integrate flake-input-modifier API into cmd_flake - ✅ COMPLETE (Session 3)
+4. [ ] **PRIORITY 3**: Implement configuration management enhancements - NEXT
 5. [ ] **ONGOING**: Begin migrating Python tests to Rust
-
-**Critical Issue Discovered**:
-- **Problem**: Config uses literal `~/.worktrees` creating subdirectory instead of expanding to home
-- **Evidence**: Test worktree created at `git-worktree-superproject/~/.worktrees/test-feature`
-- **Expected**: Should be `/home/tim/.worktrees/test-feature`
-- **Fix**: Apply `FileSystem::expand_tilde()` in Config::detect()
-- **Priority**: HIGH - Must fix before continuing to Priority 2
 
 ## 🎯 **NEXT SESSION START**
 
 **Quick Resume Command**: "Begin work on your top-priority task"
 
-**Expected Action**:
-**FIRST** - Fix tilde expansion bug (Priority 0 - BLOCKING):
-- Read workspace-manager/src/config.rs
-- Apply FileSystem::expand_tilde() to worktree_base in Config::detect()
-- Test with config containing ~/
-- Verify worktrees created in correct location
-- Commit fix
+**Expected Action**: Phase 2 Priority 3 - Configuration Management Enhancements
+- Review current cmd_init implementation (workspace-manager/src/cli.rs:151-186)
+- Consider enhancements:
+  - Interactive configuration wizard
+  - Validation of paths before saving
+  - Support for per-repo .workspace.toml configs
+  - Better defaults detection (current branch, repo root)
+- OR proceed directly to Phase 3: Python test migration to Rust
 
-**THEN** - Start Phase 2 Priority 2 - Nix Flake Integration:
-- Read flake-input-modifier API documentation (flake-input-modifier/src/lib.rs:130-154)
-- Implement cmd_flake using replace_flake_input_url() function
-- Read flake.nix from filesystem, modify, write back
-- Test with real flake.nix files
-- Commit working implementation
-
-**Current Focus**: Priority 0 (Bugfix) THEN Phase 2 Priority 2 - Nix Integration
-**Critical Priority**: Integrate flake-input-modifier API into cmd_flake
-**Strategic Goal**: Complete unified workspace manager with Nix flake support
-**Innovation Opportunity**: Seamless worktree + flake modification workflow
+**Current Focus**: Phase 2 Priority 3 (Configuration) OR Phase 3 (Testing)
+**Strategic Goal**: Complete unified workspace manager with robust configuration
+**Migration Progress**:
+  - ✅ Core infrastructure (Phase 1)
+  - ✅ Worktree lifecycle (Phase 2 Priority 1)
+  - ✅ Nix flake integration (Phase 2 Priority 2)
+  - 🔄 Configuration enhancements (Phase 2 Priority 3) - Optional refinement
+  - ⏳ Test migration (Phase 3) - Major remaining work
 
 **Architecture Decisions** (Locked):
 - ✅ Git Operations: libgit2-rs (not shell commands)
