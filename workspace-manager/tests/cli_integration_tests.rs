@@ -496,3 +496,171 @@ fn test_multiple_workspaces_can_coexist() {
         );
     }
 }
+
+// ============================================================================
+// Repair Command Tests
+// ============================================================================
+
+#[test]
+fn test_repair_missing_repository() {
+    let fixture = CliTestFixture::new();
+
+    // Create workspace
+    let mut cmd_switch = fixture.workspace_cmd();
+    cmd_switch
+        .args([
+            "switch",
+            "test-workspace",
+            "--config-file",
+            fixture.config_path.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+    cmd_switch.assert().success();
+
+    // Remove repo-a to simulate missing repository
+    let repo_path = fixture
+        .path()
+        .join(".worktrees")
+        .join("test-workspace")
+        .join("repo-a");
+    fs::remove_dir_all(&repo_path).expect("Failed to remove repo");
+
+    // Repair the missing repository
+    let mut cmd_repair = fixture.workspace_cmd();
+    cmd_repair
+        .args(["repair", "test-workspace", "repo-a"])
+        .current_dir(fixture.path());
+
+    cmd_repair
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("successful"))
+        .stdout(predicate::str::contains("CreatedMissing"));
+
+    // Verify repo was recreated
+    assert!(repo_path.exists(), "Repaired repo should exist");
+    assert!(repo_path.join(".git").exists(), "Repo should have .git");
+}
+
+#[test]
+fn test_repair_corrupted_repository() {
+    let fixture = CliTestFixture::new();
+
+    // Create workspace
+    let mut cmd_switch = fixture.workspace_cmd();
+    cmd_switch
+        .args([
+            "switch",
+            "test-workspace",
+            "--config-file",
+            fixture.config_path.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+    cmd_switch.assert().success();
+
+    // Corrupt repo-a by removing .git directory and replacing with invalid file
+    let repo_path = fixture
+        .path()
+        .join(".worktrees")
+        .join("test-workspace")
+        .join("repo-a");
+    fs::remove_dir_all(repo_path.join(".git")).expect("Failed to remove .git");
+    fs::write(repo_path.join(".git"), "gitdir: /nonexistent/path\n")
+        .expect("Failed to corrupt .git");
+
+    // Repair the corrupted repository
+    let mut cmd_repair = fixture.workspace_cmd();
+    cmd_repair
+        .args(["repair", "test-workspace", "repo-a"])
+        .current_dir(fixture.path());
+
+    cmd_repair
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("successful"))
+        .stdout(predicate::str::contains("ReplacedCorrupted"));
+
+    // Verify repo was fixed
+    assert!(repo_path.exists(), "Repaired repo should exist");
+
+    // Verify git status works
+    let output = std::process::Command::new("git")
+        .args(["status"])
+        .current_dir(&repo_path)
+        .output()
+        .expect("Failed to run git status");
+    assert!(output.status.success(), "Git status should work");
+}
+
+#[test]
+fn test_repair_functional_repository_no_action() {
+    let fixture = CliTestFixture::new();
+
+    // Create workspace
+    let mut cmd_switch = fixture.workspace_cmd();
+    cmd_switch
+        .args([
+            "switch",
+            "test-workspace",
+            "--config-file",
+            fixture.config_path.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+    cmd_switch.assert().success();
+
+    // Repair a functional repository (should be no-op)
+    let mut cmd_repair = fixture.workspace_cmd();
+    cmd_repair
+        .args(["repair", "test-workspace", "repo-a"])
+        .current_dir(fixture.path());
+
+    cmd_repair
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("successful"))
+        .stdout(predicate::str::contains("NoActionNeeded"));
+}
+
+#[test]
+fn test_repair_nonexistent_workspace_fails() {
+    let fixture = CliTestFixture::new();
+
+    // Try to repair in nonexistent workspace
+    let mut cmd_repair = fixture.workspace_cmd();
+    cmd_repair
+        .args(["repair", "nonexistent-workspace", "repo-a"])
+        .current_dir(fixture.path());
+
+    cmd_repair
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not found").or(predicate::str::contains("Workspace")));
+}
+
+#[test]
+fn test_repair_nonexistent_repo_fails() {
+    let fixture = CliTestFixture::new();
+
+    // Create workspace
+    let mut cmd_switch = fixture.workspace_cmd();
+    cmd_switch
+        .args([
+            "switch",
+            "test-workspace",
+            "--config-file",
+            fixture.config_path.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+    cmd_switch.assert().success();
+
+    // Try to repair repo that doesn't exist in config
+    let mut cmd_repair = fixture.workspace_cmd();
+    cmd_repair
+        .args(["repair", "test-workspace", "nonexistent-repo"])
+        .current_dir(fixture.path());
+
+    cmd_repair
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not found").or(predicate::str::contains("Repository")));
+}
