@@ -75,6 +75,15 @@ pub trait WorkspaceManager {
     /// If workspace_name is None, returns status of all workspaces.
     /// If specified, returns status of the named workspace only.
     fn status(&self, workspace_name: Option<String>) -> Result<StatusReport>;
+
+    /// Repair a broken repository in a workspace
+    ///
+    /// Attempts to fix common repository issues:
+    /// - Missing repository: clones it fresh
+    /// - Corrupted .git directory: removes and re-clones
+    /// - Uninitialized repository (no commits): fetches from remote
+    /// - Detached HEAD: checks out the proper branch
+    fn repair(&self, workspace_name: &str, repo_name: &str) -> Result<RepairReport>;
 }
 
 // ============================================================================
@@ -210,6 +219,34 @@ pub struct RepositoryStatus {
     pub name: String,
     /// Status information
     pub status: RepoStatus,
+}
+
+/// Action taken during repository repair
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RepairAction {
+    /// Repository didn't exist, cloned fresh
+    CreatedMissing,
+    /// Repository was broken or corrupted, removed and re-cloned
+    ReplacedCorrupted,
+    /// Repository was uninitialized (no commits), fetched from remote
+    FetchedUninitialized,
+    /// Repository had detached HEAD, checked out proper branch
+    CheckedOutDetached,
+    /// Repository was functional, no action needed
+    NoActionNeeded,
+}
+
+/// Report from a repository repair operation
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepairReport {
+    /// Name of the repository that was repaired
+    pub repo_name: String,
+    /// Action that was taken during repair
+    pub action_taken: RepairAction,
+    /// Whether the repair was successful
+    pub success: bool,
+    /// Human-readable message describing what was done
+    pub message: String,
 }
 
 // ============================================================================
@@ -813,6 +850,190 @@ impl WorkspaceManager for WorkspaceManagerImpl {
         }
 
         Ok(StatusReport { workspaces })
+    }
+
+    fn repair(&self, workspace_name: &str, repo_name: &str) -> Result<RepairReport> {
+        let worktree_base = self.get_worktree_base()?;
+        let workspace_dir = worktree_base.join(workspace_name);
+
+        // Validate workspace exists
+        if !workspace_dir.exists() {
+            return Err(anyhow::anyhow!("Workspace '{}' not found", workspace_name));
+        }
+
+        // Load workspace configuration to get repo URL and branch
+        let repos = self.load_workspace_config(&workspace_dir)?;
+
+        // Find the repo configuration
+        let repo_config = repos
+            .iter()
+            .find(|r| {
+                let name = r
+                    .url
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or("")
+                    .trim_end_matches(".git");
+                name == repo_name
+            })
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Repository '{}' not found in workspace configuration",
+                    repo_name
+                )
+            })?;
+
+        let repo_path = workspace_dir.join(repo_name);
+
+        // Determine the current state and decide on repair action
+        if !repo_path.exists() {
+            // Case 1: Repository doesn't exist - clone it
+            match self
+                .repo_ops
+                .clone_repo(&repo_config.url, &repo_path, &repo_config.branch)
+            {
+                Ok(_) => Ok(RepairReport {
+                    repo_name: repo_name.to_string(),
+                    action_taken: RepairAction::CreatedMissing,
+                    success: true,
+                    message: format!("Cloned missing repository from {}", repo_config.url),
+                }),
+                Err(e) => Ok(RepairReport {
+                    repo_name: repo_name.to_string(),
+                    action_taken: RepairAction::CreatedMissing,
+                    success: false,
+                    message: format!("Failed to clone repository: {}", e),
+                }),
+            }
+        } else if !self.repo_ops.is_repo(&repo_path) {
+            // Case 2: Path exists but is not a valid repo - remove and re-clone
+            std::fs::remove_dir_all(&repo_path)?;
+
+            match self
+                .repo_ops
+                .clone_repo(&repo_config.url, &repo_path, &repo_config.branch)
+            {
+                Ok(_) => Ok(RepairReport {
+                    repo_name: repo_name.to_string(),
+                    action_taken: RepairAction::ReplacedCorrupted,
+                    success: true,
+                    message: "Removed corrupted directory and re-cloned repository".to_string(),
+                }),
+                Err(e) => Ok(RepairReport {
+                    repo_name: repo_name.to_string(),
+                    action_taken: RepairAction::ReplacedCorrupted,
+                    success: false,
+                    message: format!("Failed to re-clone after removing corruption: {}", e),
+                }),
+            }
+        } else {
+            // Case 3: Valid repo exists - check its status
+            match self.repo_ops.get_status(&repo_path) {
+                Ok(RepoStatus::Uninitialized) => {
+                    // Uninitialized repo - try to fetch and checkout
+                    // Since we can't easily fetch without pull, we'll just remove and re-clone
+                    std::fs::remove_dir_all(&repo_path)?;
+
+                    match self.repo_ops.clone_repo(
+                        &repo_config.url,
+                        &repo_path,
+                        &repo_config.branch,
+                    ) {
+                        Ok(_) => Ok(RepairReport {
+                            repo_name: repo_name.to_string(),
+                            action_taken: RepairAction::FetchedUninitialized,
+                            success: true,
+                            message: "Re-initialized repository with commits from remote"
+                                .to_string(),
+                        }),
+                        Err(e) => Ok(RepairReport {
+                            repo_name: repo_name.to_string(),
+                            action_taken: RepairAction::FetchedUninitialized,
+                            success: false,
+                            message: format!("Failed to re-initialize repository: {}", e),
+                        }),
+                    }
+                }
+                Ok(RepoStatus::DetachedHead { commit }) => {
+                    // Detached HEAD - checkout the proper branch
+                    match self.repo_ops.checkout_ref(&repo_path, &repo_config.branch) {
+                        Ok(_) => Ok(RepairReport {
+                            repo_name: repo_name.to_string(),
+                            action_taken: RepairAction::CheckedOutDetached,
+                            success: true,
+                            message: format!(
+                                "Checked out branch '{}' (was detached at {})",
+                                repo_config.branch, commit
+                            ),
+                        }),
+                        Err(e) => Ok(RepairReport {
+                            repo_name: repo_name.to_string(),
+                            action_taken: RepairAction::CheckedOutDetached,
+                            success: false,
+                            message: format!("Failed to checkout branch: {}", e),
+                        }),
+                    }
+                }
+                Ok(RepoStatus::Broken { reason }) => {
+                    // Broken repo - remove and re-clone
+                    std::fs::remove_dir_all(&repo_path)?;
+
+                    match self.repo_ops.clone_repo(
+                        &repo_config.url,
+                        &repo_path,
+                        &repo_config.branch,
+                    ) {
+                        Ok(_) => Ok(RepairReport {
+                            repo_name: repo_name.to_string(),
+                            action_taken: RepairAction::ReplacedCorrupted,
+                            success: true,
+                            message: format!("Replaced broken repository (reason: {})", reason),
+                        }),
+                        Err(e) => Ok(RepairReport {
+                            repo_name: repo_name.to_string(),
+                            action_taken: RepairAction::ReplacedCorrupted,
+                            success: false,
+                            message: format!("Failed to replace broken repository: {}", e),
+                        }),
+                    }
+                }
+                Ok(_) => {
+                    // Repository is functional (Clean, Modified, or Untracked)
+                    Ok(RepairReport {
+                        repo_name: repo_name.to_string(),
+                        action_taken: RepairAction::NoActionNeeded,
+                        success: true,
+                        message: "Repository is functional, no repair needed".to_string(),
+                    })
+                }
+                Err(e) => {
+                    // Can't determine status - treat as broken and re-clone
+                    std::fs::remove_dir_all(&repo_path)?;
+
+                    match self.repo_ops.clone_repo(
+                        &repo_config.url,
+                        &repo_path,
+                        &repo_config.branch,
+                    ) {
+                        Ok(_) => Ok(RepairReport {
+                            repo_name: repo_name.to_string(),
+                            action_taken: RepairAction::ReplacedCorrupted,
+                            success: true,
+                            message: format!("Replaced unreadable repository (error: {})", e),
+                        }),
+                        Err(clone_err) => Ok(RepairReport {
+                            repo_name: repo_name.to_string(),
+                            action_taken: RepairAction::ReplacedCorrupted,
+                            success: false,
+                            message: format!(
+                                "Failed to replace unreadable repository: {}",
+                                clone_err
+                            ),
+                        }),
+                    }
+                }
+            }
+        }
     }
 }
 

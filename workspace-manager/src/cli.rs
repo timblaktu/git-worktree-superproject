@@ -132,6 +132,15 @@ pub enum Commands {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
     },
+
+    /// Repair a broken repository in a workspace
+    Repair {
+        /// Name of the workspace
+        workspace: String,
+
+        /// Name of the repository to repair
+        repo: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -264,6 +273,9 @@ pub fn execute_command(args: Args) -> Result<()> {
         }
         Commands::Foreach { name, command } => {
             cmd_foreach(config, name, command)?;
+        }
+        Commands::Repair { workspace, repo } => {
+            cmd_repair(config, workspace, repo)?;
         }
     }
 
@@ -1042,5 +1054,52 @@ fn cmd_foreach(config: Config, name: String, command: Vec<String>) -> Result<()>
     }
 
     println!("Command executed successfully in all repositories");
+    Ok(())
+}
+
+fn cmd_repair(config: Config, workspace: String, repo: String) -> Result<()> {
+    info!(
+        "Repairing repository '{}' in workspace '{}'",
+        repo, workspace
+    );
+
+    let workspace_path = config.worktree_base.join(&workspace);
+
+    // Check if workspace exists
+    if !workspace_path.exists() {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Workspace '{}' does not exist at {}",
+            workspace,
+            workspace_path.display()
+        )));
+    }
+
+    // Create workspace manager and initialize worktree_base
+    let manager = WorkspaceManagerImpl::new_with_real_git();
+    manager.set_worktree_base(config.worktree_base.clone());
+
+    println!(
+        "Attempting to repair repository '{}' in workspace '{}'...\n",
+        repo, workspace
+    );
+    let report = manager
+        .repair(&workspace, &repo)
+        .map_err(|e| WorkspaceError::WorktreeError(format!("Repair failed: {}", e)))?;
+
+    // Display results with emoji indicators
+    if report.success {
+        println!("✓ Repair successful: {}", report.repo_name);
+        println!("  Action: {:?}", report.action_taken);
+        println!("  Details: {}", report.message);
+    } else {
+        println!("✗ Repair failed: {}", report.repo_name);
+        println!("  Attempted action: {:?}", report.action_taken);
+        println!("  Error: {}", report.message);
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Failed to repair repository '{}': {}",
+            repo, report.message
+        )));
+    }
+
     Ok(())
 }
