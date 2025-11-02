@@ -196,7 +196,6 @@ fn test_remove_workspace_deletes_all_repos(
 // ============================================================================
 
 #[rstest]
-#[should_panic(expected = "Phase 6: Implement workspace sync")]
 fn test_sync_pulls_updates_from_all_repos(
     test_workspace: TestWorkspace,
     mut test_git_repos: TestGitRepos,
@@ -231,7 +230,6 @@ fn test_sync_pulls_updates_from_all_repos(
 }
 
 #[rstest]
-#[should_panic(expected = "Phase 6: Implement workspace sync")]
 fn test_sync_skips_pinned_repos_integration(
     test_workspace: TestWorkspace,
     mut test_git_repos: TestGitRepos,
@@ -271,7 +269,11 @@ fn test_sync_nonexistent_workspace_errors(test_workspace: TestWorkspace) {
     // Arrange
     let manager = WorkspaceManagerImpl::new_with_real_git();
 
-    // Act - will panic with "not yet implemented" in Phase 5
+    // Set worktree_base by calling switch() with empty config
+    let config = test_workspace_config(test_workspace.path()).build();
+    manager.switch("temp", &config).unwrap();
+
+    // Act - try to sync a nonexistent workspace
     let result = manager.sync("nonexistent");
 
     // Assert - should error

@@ -499,6 +499,39 @@ impl WorkspaceManagerImpl {
             .clone()
             .ok_or_else(|| anyhow::anyhow!("Worktree base not set - call switch() first"))
     }
+
+    /// Save workspace configuration to disk
+    fn save_workspace_config(&self, workspace_path: &Path, repos: &[RepoConfig]) -> Result<()> {
+        use serde_json;
+
+        // Serialize repos to JSON
+        let json = serde_json::to_string_pretty(repos)?;
+
+        // Write to .workspace-config.json in workspace directory
+        let config_path = workspace_path.join(".workspace-config.json");
+        std::fs::write(config_path, json)?;
+
+        Ok(())
+    }
+
+    /// Load workspace configuration from disk
+    fn load_workspace_config(&self, workspace_path: &Path) -> Result<Vec<RepoConfig>> {
+        use serde_json;
+
+        let config_path = workspace_path.join(".workspace-config.json");
+
+        if !config_path.exists() {
+            return Err(anyhow::anyhow!(
+                "Workspace config not found at {}",
+                config_path.display()
+            ));
+        }
+
+        let contents = std::fs::read_to_string(&config_path)?;
+        let repos: Vec<RepoConfig> = serde_json::from_str(&contents)?;
+
+        Ok(repos)
+    }
 }
 
 impl WorkspaceManager for WorkspaceManagerImpl {
@@ -561,15 +594,72 @@ impl WorkspaceManager for WorkspaceManagerImpl {
             }
         }
 
+        // Save workspace config for future sync operations
+        if let Err(e) = self.save_workspace_config(&workspace_dir, &config.repos) {
+            // Log warning but don't fail - workspace is still usable
+            eprintln!("Warning: Failed to save workspace config: {}", e);
+        }
+
         Ok(report)
     }
 
     fn sync(&self, workspace_name: &str) -> Result<SyncReport> {
-        // NOTE: Simplified - doesn't track pinned repos (would need config)
-        Err(anyhow::anyhow!(
-            "Workspace '{}' not found or config not available",
-            workspace_name
-        ))
+        let worktree_base = self.get_worktree_base()?;
+        let workspace_dir = worktree_base.join(workspace_name);
+
+        // Check if workspace exists
+        if !workspace_dir.exists() {
+            return Err(anyhow::anyhow!("Workspace '{}' not found", workspace_name));
+        }
+
+        // Load workspace configuration
+        let repos = self.load_workspace_config(&workspace_dir)?;
+
+        let mut report = SyncReport {
+            workspace_name: workspace_name.to_string(),
+            repos_updated: Vec::new(),
+            repos_pinned: Vec::new(),
+            repos_failed: Vec::new(),
+        };
+
+        // Process each repository
+        for repo_config in &repos {
+            // Extract repo name from URL
+            let repo_name = repo_config
+                .url
+                .rsplit('/')
+                .next()
+                .unwrap_or("repo")
+                .trim_end_matches(".git");
+
+            let repo_path = workspace_dir.join(repo_name);
+
+            // Check if repo is pinned (has git_ref set)
+            if repo_config.git_ref.is_some() {
+                // Pinned repos are skipped during sync
+                report.repos_pinned.push(repo_name.to_string());
+                continue;
+            }
+
+            // Skip if repository doesn't exist (might have been manually deleted)
+            if !self.repo_ops.is_repo(&repo_path) {
+                continue;
+            }
+
+            // Pull updates for non-pinned repos
+            match self.repo_ops.pull(&repo_path) {
+                Ok(_) => {
+                    report.repos_updated.push(repo_name.to_string());
+                }
+                Err(e) => {
+                    report
+                        .repos_failed
+                        .push((repo_name.to_string(), e.to_string()));
+                }
+            }
+        }
+
+        Ok(report)
     }
 
     fn list(&self) -> Result<Vec<WorkspaceInfo>> {
