@@ -1,6 +1,7 @@
-use crate::config::Config;
+use crate::config::{Config, RepoConfig};
 use crate::error::{Result, WorkspaceError};
 use crate::git::GitOps;
+use crate::workspace::{WorkspaceConfigBuilder, WorkspaceManager, WorkspaceManagerImpl};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use tracing::{debug, info};
@@ -105,6 +106,32 @@ pub enum Commands {
     /// Manage per-workspace configurations
     #[command(subcommand)]
     Config(ConfigCommands),
+
+    /// Switch to a multi-repo workspace (creates if doesn't exist)
+    Switch {
+        /// Name of the workspace
+        name: String,
+
+        /// Configuration file with repository definitions
+        #[arg(short = 'f', long, default_value = "workspace.conf")]
+        config_file: PathBuf,
+    },
+
+    /// Synchronize (pull) all repositories in a workspace
+    Sync {
+        /// Name of the workspace
+        name: String,
+    },
+
+    /// Execute a command in all repositories of a workspace
+    Foreach {
+        /// Name of the workspace
+        name: String,
+
+        /// Command to execute (use $name for repo name)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -229,6 +256,15 @@ pub fn execute_command(args: Args) -> Result<()> {
                 cmd_config_import(config, workspace, source_file)?;
             }
         },
+        Commands::Switch { name, config_file } => {
+            cmd_switch(config, name, config_file)?;
+        }
+        Commands::Sync { name } => {
+            cmd_sync(config, name)?;
+        }
+        Commands::Foreach { name, command } => {
+            cmd_foreach(config, name, command)?;
+        }
     }
 
     Ok(())
@@ -796,5 +832,217 @@ fn cmd_config_import(config: Config, workspace: String, source_file: PathBuf) ->
     println!();
     println!("Import complete: {} repositories imported", imported_count);
 
+    Ok(())
+}
+
+// ============================================================================
+// Multi-Repo Workspace Commands
+// ============================================================================
+
+fn cmd_switch(config: Config, name: String, config_file: PathBuf) -> Result<()> {
+    info!(
+        "Switching to workspace '{}' using config from {:?}",
+        name, config_file
+    );
+
+    // Verify config file exists
+    if !config_file.exists() {
+        return Err(WorkspaceError::ConfigError(format!(
+            "Configuration file not found: {}",
+            config_file.display()
+        )));
+    }
+
+    // Read and parse workspace.conf to get repository definitions
+    let content = std::fs::read_to_string(&config_file)?;
+    let repos = RepoConfig::parse_workspace_conf(&content);
+
+    if repos.is_empty() {
+        return Err(WorkspaceError::ConfigError(
+            "No repositories found in configuration file".to_string(),
+        ));
+    }
+
+    println!("Found {} repositories in configuration", repos.len());
+
+    // Build workspace configuration manually
+    let workspace_config = WorkspaceConfigBuilder::new()
+        .worktree_base(config.worktree_base.clone())
+        .build();
+
+    // Replace the repos vector directly since there's no .repos() method
+    let mut workspace_config = workspace_config;
+    workspace_config.repos = repos;
+
+    // Create workspace manager and switch to workspace
+    let manager = WorkspaceManagerImpl::new_with_real_git();
+
+    println!("Creating multi-repo workspace '{}'...", name);
+    let report = manager
+        .switch(&name, &workspace_config)
+        .map_err(|e| WorkspaceError::WorktreeError(format!("Switch failed: {}", e)))?;
+
+    // Display results
+    println!("\nWorkspace '{}' created successfully!", name);
+
+    if !report.repos_created.is_empty() {
+        println!("\nRepositories created:");
+        for repo_name in &report.repos_created {
+            println!("  ✓ {}", repo_name);
+        }
+    }
+
+    if !report.repos_skipped.is_empty() {
+        println!("\nRepositories skipped (already exist):");
+        for repo_name in &report.repos_skipped {
+            println!("  → {}", repo_name);
+        }
+    }
+
+    if !report.errors.is_empty() {
+        println!("\nRepositories that failed:");
+        for (repo_name, error) in &report.errors {
+            println!("  ✗ {}: {}", repo_name, error);
+        }
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Failed to create {} repositories",
+            report.errors.len()
+        )));
+    }
+
+    println!(
+        "\nWorkspace location: {}",
+        config.worktree_base.join(&name).display()
+    );
+    Ok(())
+}
+
+fn cmd_sync(config: Config, name: String) -> Result<()> {
+    info!("Synchronizing workspace '{}'", name);
+
+    let workspace_path = config.worktree_base.join(&name);
+
+    // Check if workspace exists
+    if !workspace_path.exists() {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Workspace '{}' does not exist at {}",
+            name,
+            workspace_path.display()
+        )));
+    }
+
+    // Create workspace manager and sync
+    let manager = WorkspaceManagerImpl::new_with_real_git();
+
+    println!("Synchronizing workspace '{}'...", name);
+    let report = manager
+        .sync(&name)
+        .map_err(|e| WorkspaceError::WorktreeError(format!("Sync failed: {}", e)))?;
+
+    // Display results
+    if report.repos_updated.is_empty()
+        && report.repos_pinned.is_empty()
+        && report.repos_failed.is_empty()
+    {
+        println!("No repositories found in workspace");
+        return Ok(());
+    }
+
+    if !report.repos_updated.is_empty() {
+        println!("\nRepositories updated:");
+        for repo_name in &report.repos_updated {
+            println!("  ✓ {}", repo_name);
+        }
+    } else if report.repos_pinned.is_empty() && report.repos_failed.is_empty() {
+        println!("\nAll repositories are up-to-date");
+    }
+
+    if !report.repos_pinned.is_empty() {
+        println!("\nPinned repositories (skipped):");
+        for repo_name in &report.repos_pinned {
+            println!("  → {}", repo_name);
+        }
+    }
+
+    if !report.repos_failed.is_empty() {
+        println!("\nRepositories that failed:");
+        for (repo_name, error) in &report.repos_failed {
+            println!("  ✗ {}: {}", repo_name, error);
+        }
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Failed to sync {} repositories",
+            report.repos_failed.len()
+        )));
+    }
+
+    Ok(())
+}
+
+fn cmd_foreach(config: Config, name: String, command: Vec<String>) -> Result<()> {
+    info!("Executing command across workspace '{}'", name);
+
+    if command.is_empty() {
+        return Err(WorkspaceError::ConfigError(
+            "No command specified".to_string(),
+        ));
+    }
+
+    let workspace_path = config.worktree_base.join(&name);
+
+    // Check if workspace exists
+    if !workspace_path.exists() {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Workspace '{}' does not exist at {}",
+            name,
+            workspace_path.display()
+        )));
+    }
+
+    // Create workspace manager and execute command
+    let manager = WorkspaceManagerImpl::new_with_real_git();
+
+    let command_str = command.join(" ");
+    println!(
+        "Executing '{}' across workspace '{}'...\n",
+        command_str, name
+    );
+    let result = manager
+        .foreach(&name, &command)
+        .map_err(|e| WorkspaceError::WorktreeError(format!("Foreach failed: {}", e)))?;
+
+    // Display results
+    for output in &result.outputs {
+        println!("Repository: {}", output.repo_name);
+        let success = output.exit_code == 0;
+        if success {
+            println!("  Status: ✓ Success");
+            if !output.stdout.is_empty() {
+                println!("  Output:");
+                for line in output.stdout.lines() {
+                    println!("    {}", line);
+                }
+            }
+        } else {
+            println!("  Status: ✗ Failed (exit code: {})", output.exit_code);
+            if !output.stderr.is_empty() {
+                println!("  Error:");
+                for line in output.stderr.lines() {
+                    println!("    {}", line);
+                }
+            }
+        }
+        println!();
+    }
+
+    // Check if any commands failed
+    let failed_count = result.outputs.iter().filter(|o| o.exit_code != 0).count();
+    if failed_count > 0 {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Command failed in {} repositories",
+            failed_count
+        )));
+    }
+
+    println!("Command executed successfully in all repositories");
     Ok(())
 }
