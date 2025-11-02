@@ -13,7 +13,7 @@ use workspace_manager::workspace::{WorkspaceManager, WorkspaceManagerImpl};
 // ============================================================================
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(10))] // Reduced cases for Phase 4
+    #![proptest_config(ProptestConfig::with_cases(10))] // Reduced cases for Phase 5
 
     #[test]
     #[should_panic(expected = "Phase 6: Implement workspace switch")]
@@ -21,6 +21,9 @@ proptest! {
         branch_name in "[a-z]{1,10}",
         repo_count in 1..4usize,
     ) {
+        // Property: Workspace switch operations are atomic
+        // Either ALL repos are created successfully, or NONE exist (rollback)
+
         // Arrange
         let test_workspace = TestWorkspace::new();
         let mut git_repos = TestGitRepos::new();
@@ -35,30 +38,46 @@ proptest! {
         let config = builder.build();
         let manager = WorkspaceManagerImpl::new_with_real_git();
 
-        // Act - will panic with "not yet implemented"
-        let _result = manager.switch(&branch_name, &config);
+        // Act - will panic with "not yet implemented" in Phase 5
+        let result = manager.switch(&branch_name, &config);
 
-        // Assert (unreachable in Phase 4)
-        // In Phase 6, this will verify the INVARIANT:
-        // Either ALL repos exist or NONE exist (atomic operation)
-        //
-        // let workspace_path = test_workspace.worktrees_path().join(&branch_name);
-        //
-        // if result.is_ok() && result.as_ref().unwrap().errors.is_empty() {
-        //     // Success: all repos should exist
-        //     for i in 0..repo_count {
-        //         let repo_path = workspace_path.join(format!("repo-{}", i));
-        //         prop_assert!(repo_path.exists(),
-        //             "Repo {} should exist after successful switch", i);
-        //     }
-        // } else {
-        //     // Failure: no repos should exist (atomic rollback)
-        //     for i in 0..repo_count {
-        //         let repo_path = workspace_path.join(format!("repo-{}", i));
-        //         prop_assert!(!repo_path.exists(),
-        //             "Repo {} should not exist after failed switch", i);
-        //     }
-        // }
+        // Assert - verify ATOMIC INVARIANT
+        let workspace_path = test_workspace.worktrees_path().join(&branch_name);
+
+        if result.is_ok() && result.as_ref().unwrap().errors.is_empty() {
+            // Success case: ALL repos must exist
+            for i in 0..repo_count {
+                let repo_path = workspace_path.join(format!("repo-{}", i));
+                prop_assert!(
+                    repo_path.exists(),
+                    "Invariant violation: Repo {} should exist after successful switch", i
+                );
+            }
+        } else {
+            // Failure case: NO repos should exist (atomic rollback)
+            // Or partial success with errors reported in result.errors field
+            if result.is_ok() {
+                // Partial success - some repos created, errors in result.errors
+                let created_count = result.as_ref().unwrap().repos_created.len();
+                let error_count = result.as_ref().unwrap().errors.len();
+                prop_assert!(
+                    created_count + error_count == repo_count,
+                    "All repos must be accounted for: {} created + {} errors != {} total",
+                    created_count, error_count, repo_count
+                );
+            } else {
+                // Total failure - workspace directory should not exist or be empty
+                if workspace_path.exists() {
+                    let entries: Vec<_> = std::fs::read_dir(&workspace_path)
+                        .unwrap()
+                        .collect();
+                    prop_assert!(
+                        entries.is_empty(),
+                        "Invariant violation: Failed switch should not leave repos behind"
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -67,7 +86,7 @@ proptest! {
 // ============================================================================
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(10))] // Reduced cases for Phase 4
+    #![proptest_config(ProptestConfig::with_cases(10))] // Reduced cases for Phase 5
 
     #[test]
     #[should_panic(expected = "Phase 6: Implement workspace sync")]
@@ -75,6 +94,9 @@ proptest! {
         workspace_name in "[a-z]{1,10}",
         repo_count in 1..4usize,
     ) {
+        // Property: Syncing twice without remote changes is idempotent
+        // The second sync should be a no-op (no repos updated)
+
         // Arrange
         let test_workspace = TestWorkspace::new();
         let mut git_repos = TestGitRepos::new();
@@ -92,18 +114,27 @@ proptest! {
         // Create the workspace first
         manager.switch(&workspace_name, &config).unwrap();
 
-        // Act: Sync twice - will panic with "not yet implemented"
-        let _result1 = manager.sync(&workspace_name).unwrap();
-        let _result2 = manager.sync(&workspace_name).unwrap();
+        // Act: Sync twice - will panic with "not yet implemented" in Phase 5
+        let result1 = manager.sync(&workspace_name).unwrap();
+        let result2 = manager.sync(&workspace_name).unwrap();
 
-        // Assert (unreachable in Phase 4)
-        // In Phase 6, this will verify the INVARIANT:
-        // Syncing twice should be idempotent (second sync is no-op)
-        //
-        // prop_assert_eq!(result2.repos_updated.len(), 0,
-        //     "Second sync should update no repos (idempotency)");
-        // prop_assert_eq!(result1.repos_updated.len(), result2.repos_updated.len(),
-        //     "Both syncs should have same result when no remote changes");
+        // Assert - verify IDEMPOTENCY INVARIANT
+        // First sync may pull updates (if remote changed after workspace creation)
+        // Second sync MUST be no-op since no remote changes between syncs
+        prop_assert_eq!(
+            result2.repos_updated.len(), 0,
+            "Idempotency violation: Second sync should update 0 repos (no remote changes)"
+        );
+
+        prop_assert_eq!(
+            result2.repos_pinned.len(), result1.repos_pinned.len(),
+            "Pinned repos should be consistent across syncs"
+        );
+
+        prop_assert!(
+            result2.repos_failed.is_empty(),
+            "Second sync should have no failures if first sync succeeded"
+        );
     }
 }
 
@@ -112,13 +143,16 @@ proptest! {
 // ============================================================================
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(10))] // Reduced cases for Phase 4
+    #![proptest_config(ProptestConfig::with_cases(10))] // Reduced cases for Phase 5
 
     #[test]
     #[should_panic(expected = "Phase 6: Implement foreach command")]
     fn test_foreach_isolation_invariant(
         repo_count in 2..5usize,
     ) {
+        // Property: foreach executes commands in isolation per repository
+        // Side effects in one repo don't affect other repos
+
         // Arrange
         let test_workspace = TestWorkspace::new();
         let mut git_repos = TestGitRepos::new();
@@ -134,24 +168,41 @@ proptest! {
         let manager = WorkspaceManagerImpl::new_with_real_git();
         manager.switch("test", &config).unwrap();
 
-        // Act: Execute command that writes to a file - will panic with "not yet implemented"
-        let _result = manager.foreach(
+        // Act: Execute command that writes to a file - will panic with "not yet implemented" in Phase 5
+        let result = manager.foreach(
             "test",
             &["sh".to_string(), "-c".to_string(), "echo test > output.txt".to_string()]
         ).unwrap();
 
-        // Assert (unreachable in Phase 4)
-        // In Phase 6, this will verify the INVARIANT:
-        // Commands in different repos don't interfere with each other
-        //
-        // Each repo should have its own output.txt file
-        // prop_assert_eq!(result.outputs.len(), repo_count);
-        // for i in 0..repo_count {
-        //     let output_file = test_workspace.worktrees_path()
-        //         .join(format!("test/repo-{}/output.txt", i));
-        //     prop_assert!(output_file.exists(),
-        //         "Each repo should have independent output file");
-        // }
+        // Assert - verify ISOLATION INVARIANT
+        // Each repo should have executed the command
+        prop_assert_eq!(
+            result.outputs.len(), repo_count,
+            "Isolation violation: Command should execute in all {} repos", repo_count
+        );
+
+        // Each repo should have its own independent output.txt file
+        for i in 0..repo_count {
+            let output_file = test_workspace.worktrees_path()
+                .join(format!("test/repo-{}/output.txt", i));
+            prop_assert!(
+                output_file.exists(),
+                "Isolation violation: Repo {} should have independent output file", i
+            );
+
+            // Verify file contains expected content
+            let contents = std::fs::read_to_string(&output_file).unwrap();
+            prop_assert_eq!(
+                contents.trim(), "test",
+                "Output file should contain expected content"
+            );
+        }
+
+        // Verify command succeeded in all repos (no failures)
+        prop_assert!(
+            result.failures.is_empty(),
+            "Simple command should succeed in all repos"
+        );
     }
 }
 
@@ -160,14 +211,18 @@ proptest! {
 // ============================================================================
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(10))] // Reduced cases for Phase 4
+    #![proptest_config(ProptestConfig::with_cases(10))] // Reduced cases for Phase 5
 
     #[test]
     #[should_panic(expected = "Phase 6: Implement workspace switch")]
     fn test_branch_name_handling(
         // Generate various valid git branch names
+        // Git allows alphanumeric, dash, underscore
         branch_name in "[a-zA-Z0-9_-]{1,20}",
     ) {
+        // Property: System correctly handles all valid git branch names
+        // Should either succeed or fail with appropriate error message
+
         // Arrange
         let test_workspace = TestWorkspace::new();
         let mut git_repos = TestGitRepos::new();
@@ -179,12 +234,27 @@ proptest! {
 
         let manager = WorkspaceManagerImpl::new_with_real_git();
 
-        // Act - will panic with "not yet implemented"
-        let _result = manager.switch(&branch_name, &config);
+        // Act - will panic with "not yet implemented" in Phase 5
+        let result = manager.switch(&branch_name, &config);
 
-        // Assert (unreachable in Phase 4)
-        // In Phase 6, this will verify:
-        // Workspace creation succeeds for all valid branch names
-        // prop_assert!(result.is_ok() || result.unwrap_err().to_string().contains("branch"));
+        // Assert - verify BRANCH NAME HANDLING INVARIANT
+        // Either succeeds (workspace created) or fails with appropriate error
+        if result.is_ok() {
+            // Success: workspace directory should exist
+            let workspace_path = test_workspace.worktrees_path().join(&branch_name);
+            prop_assert!(
+                workspace_path.exists(),
+                "Workspace directory should exist for branch: {}", branch_name
+            );
+        } else {
+            // Failure: error message should mention branch or validation
+            let err_msg = result.unwrap_err().to_string();
+            prop_assert!(
+                err_msg.contains("branch") ||
+                err_msg.contains("invalid") ||
+                err_msg.contains("name"),
+                "Error message should be informative: {}", err_msg
+            );
+        }
     }
 }

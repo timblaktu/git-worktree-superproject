@@ -380,6 +380,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "Phase 6: Implement workspace sync")]
     fn test_sync_skips_pinned_repos() {
+        // Test that sync() calls pull only on non-pinned repos
+        // Workspace has 3 repos: repo-a, repo-b (normal), repo-c (pinned)
+
         // Arrange
         let mut mock_ops = MockRepositoryOps::new();
 
@@ -396,7 +399,7 @@ mod tests {
             .times(1)
             .returning(|_| Ok(()));
 
-        // repo-c is pinned, should NOT be called
+        // repo-c is pinned (has git_ref set), should NOT be pulled
         mock_ops
             .expect_pull()
             .with(eq(Path::new("/worktrees/main/repo-c")))
@@ -404,25 +407,28 @@ mod tests {
 
         let manager = WorkspaceManagerImpl::new(Box::new(mock_ops));
 
-        // Act - will panic with "not yet implemented"
-        let _result = manager.sync("main").unwrap();
+        // Act - will panic with "not yet implemented" in Phase 5
+        let result = manager.sync("main").unwrap();
 
-        // Assert (unreachable in Phase 4)
-        // In Phase 6, this will verify:
-        // assert_eq!(result.repos_updated.len(), 2);
-        // assert_eq!(result.repos_pinned, vec!["repo-c"]);
+        // Assert - these checks will work in Phase 6 when implemented
+        assert_eq!(result.repos_updated.len(), 2);
+        assert_eq!(result.repos_pinned, vec!["repo-c"]);
+        assert!(result.repos_failed.is_empty());
     }
 
     #[test]
     #[should_panic(expected = "Phase 6: Implement workspace sync")]
     fn test_sync_handles_pull_failures() {
+        // Test that sync() continues on failures and reports them
+        // Workspace has 2 repos: one succeeds, one fails
+
         // Arrange
         let mut mock_ops = MockRepositoryOps::new();
 
         // First repo succeeds
         mock_ops.expect_pull().times(1).returning(|_| Ok(()));
 
-        // Second repo fails
+        // Second repo fails with network error
         mock_ops
             .expect_pull()
             .times(1)
@@ -430,32 +436,42 @@ mod tests {
 
         let manager = WorkspaceManagerImpl::new(Box::new(mock_ops));
 
-        // Act - will panic with "not yet implemented"
-        let _result = manager.sync("main").unwrap();
+        // Act - will panic with "not yet implemented" in Phase 5
+        let result = manager.sync("main").unwrap();
 
-        // Assert (unreachable in Phase 4)
-        // In Phase 6, this will verify error handling
+        // Assert - verify partial success is reported correctly
+        assert_eq!(result.repos_updated.len(), 1);
+        assert_eq!(result.repos_failed.len(), 1);
+        assert!(result.repos_failed[0].1.contains("Network error"));
     }
 
     #[test]
     #[should_panic(expected = "Phase 6: Implement foreach command")]
     fn test_foreach_outside_workspace_errors() {
+        // Test that foreach() errors when workspace doesn't exist
+
         // Arrange
         let mock_ops = MockRepositoryOps::new();
         let manager = WorkspaceManagerImpl::new(Box::new(mock_ops));
 
-        // Act - will panic with "not yet implemented"
+        // Act - will panic with "not yet implemented" in Phase 5
         let result = manager.foreach("nonexistent", &["pwd".to_string()]);
 
-        // Assert (unreachable in Phase 4)
-        // In Phase 6, this will verify:
-        // assert!(result.is_err());
-        // assert!(result.unwrap_err().to_string().contains("not found"));
+        // Assert - should error about nonexistent workspace
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("not found") || err_msg.contains("does not exist"),
+            "Error should mention workspace not found: {}",
+            err_msg
+        );
     }
 
     #[test]
     #[should_panic(expected = "Phase 6: Implement workspace switch")]
     fn test_switch_with_empty_config() {
+        // Test that switch() succeeds with empty config (no repos)
+
         // Arrange
         let mock_ops = MockRepositoryOps::new();
         let manager = WorkspaceManagerImpl::new(Box::new(mock_ops));
@@ -464,25 +480,28 @@ mod tests {
             .worktree_base(PathBuf::from("/tmp/test"))
             .build();
 
-        // Act - will panic with "not yet implemented"
-        let _result = manager.switch("main", &config).unwrap();
+        // Act - will panic with "not yet implemented" in Phase 5
+        let result = manager.switch("main", &config).unwrap();
 
-        // Assert (unreachable in Phase 4)
-        // In Phase 6, this will verify:
-        // assert_eq!(result.repos_created.len(), 0);
+        // Assert - empty config should create no repos
+        assert_eq!(result.repos_created.len(), 0);
+        assert_eq!(result.repos_skipped.len(), 0);
+        assert!(result.errors.is_empty());
     }
 
     #[test]
     #[should_panic(expected = "Phase 6: Implement workspace remove")]
     fn test_remove_workspace() {
+        // Test that remove() deletes a workspace
+
         // Arrange
         let mock_ops = MockRepositoryOps::new();
         let manager = WorkspaceManagerImpl::new(Box::new(mock_ops));
 
-        // Act - will panic with "not yet implemented"
-        let _result = manager.remove("test-workspace");
+        // Act - will panic with "not yet implemented" in Phase 5
+        let result = manager.remove("test-workspace");
 
-        // Assert (unreachable in Phase 4)
-        // In Phase 6, this will verify successful removal
+        // Assert - should succeed
+        assert!(result.is_ok(), "Removing workspace should succeed");
     }
 }
