@@ -639,9 +639,13 @@ impl WorkspaceManager for WorkspaceManagerImpl {
                 if self.repo_ops.is_repo(&repo_path) {
                     let repo_name = entry.file_name().to_string_lossy().to_string();
 
-                    // Execute command in repo directory
-                    match std::process::Command::new(&command[0])
-                        .args(&command[1..])
+                    // Execute command through shell for environment variable expansion
+                    // Join command parts into a single shell command string
+                    let shell_command = command.join(" ");
+
+                    match std::process::Command::new("sh")
+                        .arg("-c")
+                        .arg(&shell_command)
                         .current_dir(&repo_path)
                         .env("name", &repo_name) // Provide $name environment variable
                         .output()
