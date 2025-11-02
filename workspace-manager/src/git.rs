@@ -491,6 +491,88 @@ impl GitOps {
 
         Ok(inputs)
     }
+
+    /// Generate workspace-specific flake.nix with input overrides applied
+    /// Reads source flake, applies all configured input overrides, returns modified content
+    pub fn generate_workspace_flake(&self, source_flake_content: &str) -> Result<String> {
+        use rnix::{Root, SyntaxKind, SyntaxNode};
+        use rowan::ast::AstNode;
+
+        // Parse the flake to find all URL strings
+        let parse_result = Root::parse(source_flake_content);
+        let root = parse_result.tree();
+
+        let mut modified_content = source_flake_content.to_string();
+
+        // Helper to find all URL strings in the tree
+        fn find_url_strings(node: &SyntaxNode) -> Vec<String> {
+            let mut urls = Vec::new();
+
+            if node.kind() == SyntaxKind::NODE_STRING {
+                let text = node.text().to_string();
+                // Remove quotes and check if it looks like a flake URL
+                let cleaned = text.trim_matches('"');
+                if cleaned.contains("github:")
+                    || cleaned.contains("gitlab:")
+                    || cleaned.contains("git+")
+                    || cleaned.starts_with("http")
+                {
+                    urls.push(cleaned.to_string());
+                }
+            }
+
+            for child in node.children() {
+                urls.extend(find_url_strings(&child));
+            }
+
+            urls
+        }
+
+        // Find all URLs in the source flake
+        let original_urls = if let Some(expr) = root.expr() {
+            find_url_strings(expr.syntax())
+        } else {
+            Vec::new()
+        };
+
+        // Get all configured flake input overrides (workspace + default)
+        let workspace_inputs = self.get_all_flake_inputs_worktree()?;
+        let default_inputs = self.get_all_flake_inputs_default()?;
+
+        // Combine all overrides (workspace takes precedence)
+        let mut all_overrides = std::collections::HashMap::new();
+        for (name, url) in default_inputs {
+            all_overrides.insert(name, url);
+        }
+        for (name, url) in workspace_inputs {
+            all_overrides.insert(name, url);
+        }
+
+        // For each configured override, try to find a matching URL in the original flake
+        // and apply the replacement
+        for (input_name, override_url) in all_overrides {
+            // Try to find the current URL for this input in the source flake
+            // We'll match by trying the replacement - if it fails, the input doesn't exist in the flake
+            for original_url in &original_urls {
+                // Try to apply this replacement
+                if let Ok(new_content) = flake_input_modifier::replace_flake_input_url(
+                    &modified_content,
+                    &input_name,
+                    original_url,
+                    &override_url,
+                ) {
+                    modified_content = new_content;
+                    info!(
+                        "Applied flake input override: {} = {} (was: {})",
+                        input_name, override_url, original_url
+                    );
+                    break; // Successfully applied, move to next override
+                }
+            }
+        }
+
+        Ok(modified_content)
+    }
 }
 
 /// Information about a worktree

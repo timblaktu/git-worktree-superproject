@@ -141,6 +141,20 @@ pub enum Commands {
         /// Name of the repository to repair
         repo: String,
     },
+
+    /// Regenerate workspace-specific flake.nix with input overrides
+    RegenerateFlake {
+        /// Name of the workspace (defaults to detecting from current directory)
+        workspace: Option<String>,
+
+        /// Source flake path (defaults to flake.nix in current directory)
+        #[arg(short = 's', long, default_value = "flake.nix")]
+        source: PathBuf,
+
+        /// Output flake path (defaults to <workspace-dir>/flake.nix)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -330,6 +344,13 @@ pub fn execute_command(args: Args) -> Result<()> {
         }
         Commands::Repair { workspace, repo } => {
             cmd_repair(config, workspace, repo)?;
+        }
+        Commands::RegenerateFlake {
+            workspace,
+            source,
+            output,
+        } => {
+            cmd_regenerate_flake(config, workspace, source, output)?;
         }
     }
 
@@ -1308,6 +1329,112 @@ fn cmd_repair(config: Config, workspace: String, repo: String) -> Result<()> {
             "Failed to repair repository '{}': {}",
             repo, report.message
         )));
+    }
+
+    Ok(())
+}
+
+fn cmd_regenerate_flake(
+    config: Config,
+    workspace: Option<String>,
+    source: PathBuf,
+    output: Option<PathBuf>,
+) -> Result<()> {
+    // Determine workspace name
+    let workspace_name = if let Some(name) = workspace {
+        name
+    } else {
+        // Try to detect workspace from current directory
+        let current_dir = std::env::current_dir()?;
+        let worktree_base = &config.worktree_base;
+
+        if current_dir.starts_with(worktree_base) {
+            // Extract workspace name from path
+            let relative_path = current_dir.strip_prefix(worktree_base).map_err(|_| {
+                WorkspaceError::ConfigError(
+                    "Could not determine workspace from current directory".to_string(),
+                )
+            })?;
+
+            // Get the first component (workspace name)
+            relative_path
+                .components()
+                .next()
+                .and_then(|c| c.as_os_str().to_str())
+                .ok_or_else(|| {
+                    WorkspaceError::ConfigError(
+                        "Could not determine workspace from current directory".to_string(),
+                    )
+                })?
+                .to_string()
+        } else {
+            return Err(WorkspaceError::ConfigError(
+                "Not in a workspace directory. Please specify workspace name or cd to a workspace."
+                    .to_string(),
+            ));
+        }
+    };
+
+    info!("Regenerating flake.nix for workspace '{}'", workspace_name);
+
+    let worktree_path = config.worktree_base.join(&workspace_name);
+
+    // Check if workspace exists
+    if !worktree_path.exists() {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Workspace '{}' does not exist at {}",
+            workspace_name,
+            worktree_path.display()
+        )));
+    }
+
+    // Verify source flake exists
+    if !source.exists() {
+        return Err(WorkspaceError::ConfigError(format!(
+            "Source flake not found: {}",
+            source.display()
+        )));
+    }
+
+    // Determine output path
+    let output_path = output.unwrap_or_else(|| worktree_path.join("flake.nix"));
+
+    println!("Regenerating flake.nix for workspace: {}", workspace_name);
+    println!("  Source: {}", source.display());
+    println!("  Output: {}", output_path.display());
+    println!();
+
+    // Read source flake
+    let source_content = std::fs::read_to_string(&source)
+        .map_err(|e| WorkspaceError::ConfigError(format!("Failed to read source flake: {}", e)))?;
+
+    // Open workspace git repository
+    let workspace_git = GitOps::open(&worktree_path)?;
+
+    // Generate workspace-specific flake with overrides
+    let modified_content = workspace_git.generate_workspace_flake(&source_content)?;
+
+    // Write output flake
+    std::fs::write(&output_path, modified_content)
+        .map_err(|e| WorkspaceError::ConfigError(format!("Failed to write output flake: {}", e)))?;
+
+    println!("✓ Workspace flake.nix regenerated successfully");
+    println!("  Location: {}", output_path.display());
+
+    // Show which overrides were applied
+    let workspace_inputs = workspace_git.get_all_flake_inputs_worktree()?;
+    let default_inputs = workspace_git.get_all_flake_inputs_default()?;
+
+    if !workspace_inputs.is_empty() || !default_inputs.is_empty() {
+        println!("\nApplied input overrides:");
+        for (name, url) in workspace_inputs {
+            println!("  {} = {} (workspace-specific)", name, url);
+        }
+        for (name, url) in default_inputs {
+            println!("  {} = {} (default)", name, url);
+        }
+    } else {
+        println!("\nNo input overrides configured (flake copied as-is)");
     }
 
     Ok(())
