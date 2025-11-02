@@ -29,7 +29,7 @@
 - **Rust**: Production-ready AST-based Nix flake modification (`flake-input-modifier/`)
 - **Python**: Comprehensive pytest test suite (728+ tests in `test/`)
 
-**Migration Status**: ✅ Phase 1 COMPLETE | ✅ Phase 2 COMPLETE (All priorities done) | 🚀 Phase 3 READY (test migration)
+**Migration Status**: ✅ Phase 1 COMPLETE | ⚠️ Phase 2 CRITICAL BUG (worktree config) | ⏸️ Phase 3 BLOCKED (awaiting bug fix)
 
 ## 🔧 **IMPORTANT PATHS**
 
@@ -120,13 +120,20 @@ Plan integration of existing Rust AST system into new unified project.
 
 ## 📋 **CURRENT TASKS** (2025-11-02 - Session 5: Configuration Management)
 
-**Status**: ✅ PHASE 2 PRIORITY 3 COMPLETE - Full config system with git config integration
+**Status**: 🚨 CRITICAL BUG FOUND - Worktree-specific config not working correctly
 
-✅ **ALL PHASE 2 PRIORITIES COMPLETE**:
+🚨 **CRITICAL ISSUE DISCOVERED**:
+1. ⚠️ **Worktree-specific git config NOT being stored correctly**
+   - libgit2's `Repository::config()` does not access worktree-specific config
+   - Config is being stored in superproject's default config instead
+   - Need to use worktree-specific config API or direct file manipulation
+   - **MUST FIX before Phase 2 can be considered complete**
+
+✅ **Phase 2 Priorities Completed (with caveat)**:
 1. ✅ Tilde expansion in config paths (Priority 0 - Session 3)
 2. ✅ Complete worktree operations (Priority 1 - Session 2)
 3. ✅ Nix flake integration (Priority 2 - Session 3)
-4. ✅ Configuration management system (Priority 3 - Session 5) **← NEW**
+4. ⚠️ Configuration management system (Priority 3 - Session 5) **← BUG FOUND**
 
 **Completed This Session (Session 5 - Configuration Management)**:
 - [x] ✅ Analyzed Python config test suite (60+ tests across 3 files)
@@ -199,16 +206,51 @@ Plan integration of existing Rust AST system into new unified project.
 - Total: +21 lines of safety documentation
 - 0 commits (documentation only, pending user review)
 
-**Build Status**: ✅ cargo check passes | ✅ cargo test passes (9 tests)
+**Build Status**: ✅ cargo check passes | ✅ cargo test passes (9 tests) | ⚠️ Critical bug in worktree config
 
-**Phase 2 Priority Tasks**: ✅ **ALL COMPLETE**
+**🚨 URGENT NEXT SESSION TASK**:
+**Fix worktree-specific git config bug (PRIORITY 0)**
+
+**Problem**: `GitOps::open(&worktree_path).config_add()` does NOT write to worktree-specific config
+- Current behavior: Writes to superproject's .git/config (default config)
+- Expected behavior: Should write to .git/worktrees/<name>/config.worktree
+- Root cause: libgit2's `Repository::config()` doesn't access worktree-specific config level
+
+**Solution Options**:
+1. **Use git2 Config::open_level()** to access CONFIG_WORKTREE level
+   - Research git2 ConfigLevel enum
+   - Open config at CONFIG_WORKTREE level explicitly
+   - May require different API than current implementation
+
+2. **Direct file manipulation** (bash script approach)
+   - Write directly to .git/worktrees/<name>/config.worktree
+   - Use standard config file format
+   - Simpler but bypasses libgit2's config abstraction
+
+3. **Use git command-line** (fallback)
+   - Call `git config --worktree` via Command::new("git")
+   - Matches bash script exactly
+   - Less elegant but guaranteed to work
+
+**Testing Strategy**:
+1. After fix, verify `config.worktree` file is created
+2. Verify `git config --worktree --get-all workspace.repo` returns correct values
+3. Verify inheritance chain works (worktree → default → legacy)
+4. Add test case for worktree config isolation
+
+**Files to Modify**:
+- workspace-manager/src/git.rs (config methods - need worktree-specific versions)
+- workspace-manager/src/cli.rs (cmd_config_set - use new worktree methods)
+
+**Phase 2 Priority Tasks**: ⚠️ **ONE CRITICAL BUG TO FIX**
 1. [x] **PRIORITY 1**: Complete worktree operations - ✅ COMPLETE (Session 2)
 2. [x] **PRIORITY 0**: Fix tilde expansion in config paths - ✅ COMPLETE (Session 3)
 3. [x] **PRIORITY 2**: Integrate flake-input-modifier API into cmd_flake - ✅ COMPLETE (Session 3)
-4. [x] **PRIORITY 3**: Configuration management with git config - ✅ COMPLETE (Session 5)
+4. [⚠️] **PRIORITY 3**: Configuration management with git config - ⚠️ BUG FOUND (Session 5)
+5. [ ] **PRIORITY 0 (NEW)**: Fix worktree-specific config storage bug - 🚨 **NEXT SESSION**
 
-**Next Phase**:
-5. [ ] **PHASE 3**: Begin migrating Python tests to Rust (728+ tests)
+**Next Phase (after bug fix)**:
+6. [ ] **PHASE 3**: Begin migrating Python tests to Rust (728+ tests)
 
 ⚠️ **CLEANUP TASK** (Safe to do manually):
 - Leftover buggy directory: `/home/tim/src/git-worktree-superproject/~` (literal tilde name)
@@ -220,16 +262,23 @@ Plan integration of existing Rust AST system into new unified project.
 
 **Quick Resume Command**: "Begin work on your top-priority task"
 
-**Expected Action**: **Phase 3 - Begin Python Test Migration**
+**Expected Action**: 🚨 **FIX CRITICAL BUG - Worktree Config Storage**
 
-✅ **Phase 2 is COMPLETE!** All priorities finished:
+⚠️ **Phase 2 is NOT COMPLETE!** Critical bug discovered in Session 5:
 - ✅ Phase 1: Core infrastructure (Sessions 1-2)
 - ✅ Phase 2 Priority 0: Tilde expansion fix (Session 3)
 - ✅ Phase 2 Priority 1: Complete worktree operations (Session 2)
 - ✅ Phase 2 Priority 2: Nix flake integration (Session 3)
-- ✅ Phase 2 Priority 3: Configuration management (Session 5)
+- ⚠️ Phase 2 Priority 3: Configuration management (Session 5) **← BUG FOUND**
+- 🚨 **Phase 2 Priority 0 (NEW): Fix worktree config bug** **← URGENT**
 
-**Phase 3 Strategy - Python Test Migration:**
+**Bug Details**:
+- Worktree-specific git config NOT being stored in config.worktree file
+- Config incorrectly stored in superproject's default config
+- libgit2 Repository::config() doesn't access worktree-specific config level
+- See detailed solution options above in "URGENT NEXT SESSION TASK" section
+
+**After Bug Fix - Phase 3 Strategy (Python Test Migration):**
 1. **Start with Config Tests** (60+ tests, well-structured):
    - test_config.py (8 tests): Basic config parsing
    - test_per_workspace_config.py (11 tests): Git config system
