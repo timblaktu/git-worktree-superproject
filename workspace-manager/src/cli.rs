@@ -93,9 +93,13 @@ pub enum Commands {
         #[arg(short, long)]
         input: String,
 
-        /// New URL for the input
+        /// Old URL to replace
         #[arg(short, long)]
-        url: String,
+        old_url: String,
+
+        /// New URL for the input
+        #[arg(short = 'n', long)]
+        new_url: String,
     },
 }
 
@@ -140,8 +144,13 @@ pub fn execute_command(args: Args) -> Result<()> {
         Commands::Status => {
             cmd_status(config)?;
         }
-        Commands::Flake { file, input, url } => {
-            cmd_flake(file, input, url)?;
+        Commands::Flake {
+            file,
+            input,
+            old_url,
+            new_url,
+        } => {
+            cmd_flake(file, input, old_url, new_url)?;
         }
     }
 
@@ -468,17 +477,37 @@ fn cmd_status(config: Config) -> Result<()> {
     Ok(())
 }
 
-fn cmd_flake(file: PathBuf, input: String, url: String) -> Result<()> {
-    info!("Modifying Nix flake input: {} -> {}", input, url);
+fn cmd_flake(file: PathBuf, input: String, old_url: String, new_url: String) -> Result<()> {
+    info!(
+        "Modifying Nix flake input '{}': {} -> {}",
+        input, old_url, new_url
+    );
 
-    // Use the flake-input-modifier functionality
-    // This is a placeholder - will integrate with the actual flake-input-modifier library
-    println!("Flake modification:");
+    // Verify flake file exists
+    if !file.exists() {
+        return Err(WorkspaceError::ConfigError(format!(
+            "Flake file not found: {}",
+            file.display()
+        )));
+    }
+
+    // Read the flake file
+    let flake_content = std::fs::read_to_string(&file)
+        .map_err(|e| WorkspaceError::ConfigError(format!("Failed to read flake file: {}", e)))?;
+
+    // Use flake-input-modifier to perform the replacement
+    let modified_content =
+        flake_input_modifier::replace_flake_input_url(&flake_content, &input, &old_url, &new_url)
+            .map_err(|e| WorkspaceError::NixError(format!("Failed to modify flake: {}", e)))?;
+
+    // Write the modified content back to the file
+    std::fs::write(&file, modified_content)
+        .map_err(|e| WorkspaceError::ConfigError(format!("Failed to write flake file: {}", e)))?;
+
+    println!("✓ Modified flake input '{}'", input);
     println!("  File: {}", file.display());
-    println!("  Input: {}", input);
-    println!("  New URL: {}", url);
-
-    println!("\nNote: Flake modification integration coming in Phase 2");
+    println!("  Old URL: {}", old_url);
+    println!("  New URL: {}", new_url);
 
     Ok(())
 }
