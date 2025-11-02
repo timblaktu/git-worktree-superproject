@@ -1,5 +1,5 @@
 use crate::error::{Result, WorkspaceError};
-use git2::{BranchType, Repository, Worktree, WorktreeLockStatus};
+use git2::{BranchType, ConfigLevel, Repository, Worktree, WorktreeLockStatus};
 use std::path::{Path, PathBuf};
 use tracing::{debug, info};
 
@@ -308,6 +308,81 @@ impl GitOps {
             }
         }
         false
+    }
+
+    /// Add a value to a multi-value git config key at the worktree level
+    /// This writes to .git/worktrees/<name>/config.worktree
+    pub fn worktree_config_add(&self, key: &str, value: &str) -> Result<()> {
+        // First ensure worktree config extension is enabled
+        if !self.is_worktree_config_enabled() {
+            self.enable_worktree_config()?;
+        }
+
+        // Get the full config and open the worktree level
+        let config = self.repo.config()?;
+        let mut worktree_config = config.open_level(ConfigLevel::Worktree)?;
+
+        // Add the multivar value at worktree level
+        worktree_config.set_multivar(key, "^$", value)?; // ^$ matches nothing, so always adds
+
+        debug!("Added worktree config: {} = {}", key, value);
+        Ok(())
+    }
+
+    /// Set a git config value (single value) at the worktree level
+    pub fn worktree_config_set(&self, key: &str, value: &str) -> Result<()> {
+        // First ensure worktree config extension is enabled
+        if !self.is_worktree_config_enabled() {
+            self.enable_worktree_config()?;
+        }
+
+        // Get the full config and open the worktree level
+        let config = self.repo.config()?;
+        let mut worktree_config = config.open_level(ConfigLevel::Worktree)?;
+
+        // Set the value at worktree level
+        worktree_config.set_str(key, value)?;
+
+        debug!("Set worktree config: {} = {}", key, value);
+        Ok(())
+    }
+
+    /// Get all values for a git config key from the worktree level only
+    pub fn worktree_config_get_all(&self, key: &str) -> Result<Vec<String>> {
+        if !self.is_worktree_config_enabled() {
+            return Ok(Vec::new());
+        }
+
+        let config = self.repo.config()?;
+        let worktree_config = config.open_level(ConfigLevel::Worktree)?;
+        let mut values = Vec::new();
+
+        // Get all multivar values using multivar iterator
+        if let Ok(mut entries) = worktree_config.entries(Some(key)) {
+            while let Some(entry) = entries.next() {
+                if let Ok(entry) = entry {
+                    if let Some(value) = entry.value() {
+                        values.push(value.to_string());
+                    }
+                }
+            }
+        }
+
+        Ok(values)
+    }
+
+    /// Remove all values for a git config key at the worktree level
+    pub fn worktree_config_unset_all(&self, key: &str) -> Result<()> {
+        if !self.is_worktree_config_enabled() {
+            return Ok(()); // Nothing to unset if extension not enabled
+        }
+
+        let config = self.repo.config()?;
+        let mut worktree_config = config.open_level(ConfigLevel::Worktree)?;
+        worktree_config.remove_multivar(key, ".*")?;
+
+        debug!("Removed all worktree config values for: {}", key);
+        Ok(())
     }
 }
 

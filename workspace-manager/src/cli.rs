@@ -612,7 +612,7 @@ fn cmd_config_show(config: Config, workspace: String) -> Result<()> {
     // Priority 1: Worktree-specific config
     if workspace_exists {
         let worktree_git = GitOps::open(&worktree_path)?;
-        let worktree_configs = worktree_git.config_get_all("workspace.repo")?;
+        let worktree_configs = worktree_git.worktree_config_get_all("workspace.repo")?;
 
         if !worktree_configs.is_empty() {
             println!("Workspace-specific repositories:");
@@ -696,9 +696,9 @@ fn cmd_config_set(
         config_value.push_str(ref_val);
     }
 
-    // Open worktree and set config
+    // Open worktree and set worktree-specific config
     let worktree_git = GitOps::open(&worktree_path)?;
-    worktree_git.config_add("workspace.repo", &config_value)?;
+    worktree_git.worktree_config_add("workspace.repo", &config_value)?;
 
     println!("Set repository config for workspace '{}':", workspace);
     println!("  {}", config_value);
@@ -771,7 +771,7 @@ fn cmd_config_import(config: Config, workspace: String, source_file: PathBuf) ->
     let worktree_git = GitOps::open(&worktree_path)?;
 
     // Clear existing worktree-specific config
-    let _ = worktree_git.config_unset_all("workspace.repo");
+    let _ = worktree_git.worktree_config_unset_all("workspace.repo");
 
     // Read and import configuration
     let content = std::fs::read_to_string(&source_file)?;
@@ -787,8 +787,8 @@ fn cmd_config_import(config: Config, workspace: String, source_file: PathBuf) ->
             continue;
         }
 
-        // Import the line as-is
-        worktree_git.config_add("workspace.repo", trimmed)?;
+        // Import the line as-is using worktree-specific config
+        worktree_git.worktree_config_add("workspace.repo", trimmed)?;
         println!("  Imported: {}", trimmed);
         imported_count += 1;
     }
