@@ -1,0 +1,11 @@
+# Example workspace.conf for testing
+# Format: <git-url> <branch> [ref]
+#
+# Examples:
+# - Default branch: https://github.com/user/repo.git main
+# - Pinned to tag: https://github.com/user/repo.git main v1.0.0
+# - Pinned to commit: https://github.com/user/repo.git main abc123
+
+# Small, stable public repositories for testing
+https://github.com/rust-lang/rustlings.git main
+https://github.com/BurntSushi/ripgrep.git master

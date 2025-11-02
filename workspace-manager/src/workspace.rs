@@ -485,6 +485,11 @@ impl WorkspaceManagerImpl {
         Self::new(Box::new(RealRepositoryOps::new()))
     }
 
+    /// Set the worktree base path (for CLI initialization)
+    pub fn set_worktree_base(&self, path: PathBuf) {
+        *self.worktree_base.borrow_mut() = Some(path);
+    }
+
     /// Remember the worktree base from first config
     fn remember_worktree_base(&self, config_base: &Path) {
         let mut base = self.worktree_base.borrow_mut();

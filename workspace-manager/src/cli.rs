@@ -931,8 +931,9 @@ fn cmd_sync(config: Config, name: String) -> Result<()> {
         )));
     }
 
-    // Create workspace manager and sync
+    // Create workspace manager and initialize worktree_base
     let manager = WorkspaceManagerImpl::new_with_real_git();
+    manager.set_worktree_base(config.worktree_base.clone());
 
     println!("Synchronizing workspace '{}'...", name);
     let report = manager
@@ -940,20 +941,16 @@ fn cmd_sync(config: Config, name: String) -> Result<()> {
         .map_err(|e| WorkspaceError::WorktreeError(format!("Sync failed: {}", e)))?;
 
     // Display results
-    if report.repos_updated.is_empty()
-        && report.repos_pinned.is_empty()
-        && report.repos_failed.is_empty()
-    {
-        println!("No repositories found in workspace");
-        return Ok(());
-    }
-
     if !report.repos_updated.is_empty() {
         println!("\nRepositories updated:");
         for repo_name in &report.repos_updated {
             println!("  ✓ {}", repo_name);
         }
-    } else if report.repos_pinned.is_empty() && report.repos_failed.is_empty() {
+    } else if !report.repos_pinned.is_empty() || !report.repos_failed.is_empty() {
+        // Have pinned or failed repos, but no updates
+        println!("\nNo repositories updated");
+    } else {
+        // No updates, no pinned, no failures = all up-to-date
         println!("\nAll repositories are up-to-date");
     }
 
@@ -998,8 +995,9 @@ fn cmd_foreach(config: Config, name: String, command: Vec<String>) -> Result<()>
         )));
     }
 
-    // Create workspace manager and execute command
+    // Create workspace manager and initialize worktree_base
     let manager = WorkspaceManagerImpl::new_with_real_git();
+    manager.set_worktree_base(config.worktree_base.clone());
 
     let command_str = command.join(" ");
     println!(
