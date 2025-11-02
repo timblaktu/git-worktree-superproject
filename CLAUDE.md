@@ -9,11 +9,11 @@
 
 ---
 
-## 🎯 CURRENT STATUS (Session 24 COMPLETE)
+## 🎯 CURRENT STATUS (Task 4 COMPLETE - Flake Generation)
 
 **Branch**: `rust-migration`
-**Tests Passing**: 230/230 tests (100% ✅)
-**Migration Progress**: ~60% feature parity with bash
+**Tests Passing**: 238/238 tests (100% ✅)
+**Migration Progress**: ~65% feature parity with bash
 **Lines of Code**: 5,006 Rust (from 1,481 bash)
 
 **✅ COMPLETE - Core Features:**
@@ -21,12 +21,13 @@
 - Repository repair command (Session 21)
 - Config management CLI (Session 22-23)
 - **Nix flake input override system with 3-tier inheritance** (Session 24 ✅)
-- CLI commands: init, list, add, remove, info, branches, status, flake, config, switch, sync, foreach, repair
-- End-to-end CLI testing (40 assert_cmd tests, all passing)
+- **Workspace-specific flake generation with AST-based overrides** (Task 4 ✅)
+- CLI commands: init, list, add, remove, info, branches, status, flake, config, switch, sync, foreach, repair, regenerate-flake
+- End-to-end CLI testing (48 assert_cmd tests, all passing)
 
 **⚠️ NEXT PRIORITY FOR PRODUCTION:**
-- Task 4: Workspace-Specific Flake Generation
-- Implement `generate_workspace_flake()` and `regenerate_workspace_flake()`
+- Task 5: Workspace Cleanup Command
+- Implement `clean_workspace()` to remove stale/broken worktrees
 
 ---
 
