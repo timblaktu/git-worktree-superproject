@@ -20,6 +20,25 @@
   - `cargo test` is SAFE - all tests use tempdir() or read-only operations
   - Before adding new filesystem tests: verify they use tempdir() or are read-only
 
+---
+
+## 🚀 **NEXT SESSION: Phase 3 - Python Test Migration**
+
+**Command to resume:** "Begin work on your top-priority task"
+
+**What you'll do:**
+1. Read and analyze Python test files: `test/test_config.py` (8 tests)
+2. Understand test patterns and what they validate
+3. Create equivalent Rust tests in `workspace-manager/src/config.rs` module
+4. Use `tempdir()` for any file I/O tests
+5. Verify tests pass with `cargo test`
+6. Commit when first batch of tests working
+
+**Phase 2 Status:** ✅ **FULLY COMPLETE** (including critical worktree config bug fix in Session 6)
+**Current State:** All 9 tests passing, git clean, ready for Phase 3
+
+---
+
 ## 📊 **CURRENT SYSTEM STATUS**
 
 **Current Branch**: `rust-migration` (created for unified Rust implementation)
