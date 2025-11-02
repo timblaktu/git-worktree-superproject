@@ -13,6 +13,12 @@
   - ALWAYS test with `ls` before any `rm -rf`
   - A directory can be NAMED `~` (literal char) vs `~` (shell expansion to $HOME)
   - When in doubt: ask user before running ANY `rm -rf` command
+- **🧪 TEST SAFETY RULES 🧪**:
+  - ALL file-creating tests MUST use `tempdir()` for isolation
+  - NEVER operate on project directories in tests
+  - Path expansion tests (like test_expand_tilde) are string-only - NO file I/O
+  - `cargo test` is SAFE - all tests use tempdir() or read-only operations
+  - Before adding new filesystem tests: verify they use tempdir() or are read-only
 
 ## 📊 **CURRENT SYSTEM STATUS**
 
@@ -110,15 +116,34 @@ Plan integration of existing Rust AST system into new unified project.
 - **Single-User Optimization**: No need for complex configuration compatibility
 - **Test Migration**: Gradual migration of Python tests to native Rust tests
 
-## 📋 **CURRENT TASKS** (2025-11-02 - Session 3 Complete)
+## 📋 **CURRENT TASKS** (2025-11-02 - Session 4: Safety Review)
 
-**Status**: ✅ Phase 2 Priority 0-2 COMPLETE - Bugfix + Nix flake integration implemented
+**Status**: 🔒 SAFETY REVIEW COMPLETE - All tests verified safe, guidelines updated
 
 ✅ **CRITICAL ISSUES RESOLVED**:
 1. ✅ Tilde expansion in config paths (Priority 0)
 2. ✅ Nix flake integration complete (Priority 2)
+3. ✅ Test safety verification (Session 4)
 
-**Completed This Session (Session 3)**:
+**Completed This Session (Session 4 - Safety Review)**:
+- [x] ✅ Critical safety concern raised by user about ~ directory
+- [x] ✅ Analyzed all 6 tests in workspace-manager - ALL SAFE:
+  - test_expand_tilde: String-only, no file I/O
+  - test_create_and_remove_dir: Uses tempdir()
+  - test_config_round_trip: Uses tempdir()
+  - test_open_repository: Read-only git ops
+  - test_list_branches: Read-only git ops
+  - test_current_branch: Read-only git ops
+- [x] ✅ Verified NO tests operate on literal `~` directory
+- [x] ✅ Confirmed literal `~` dir created by OLD buggy code (before commit 6af5385)
+- [x] ✅ Current code is safe (tilde expansion working correctly)
+- [x] ✅ Added comprehensive TEST SAFETY RULES to CLAUDE.md
+- [x] ✅ Documented why test_expand_tilde() needs to test "~" strings
+- [x] ✅ Updated task documentation for safety-first approach
+
+**Previous Sessions Completed**:
+
+**Session 3**:
 - [x] ✅ Fixed tilde expansion bug in config paths (workspace-manager/src/config.rs)
   - Imported FileSystem module into config
   - Applied expand_tilde() in default_config() (line 44)
@@ -137,11 +162,17 @@ Plan integration of existing Rust AST system into new unified project.
   - Structure preservation verified (nested follows, formatting intact)
   - Committed implementation (commit: 9d0bf9d)
 
-**Code Changes This Session**:
+**Code Changes Session 3**:
 - workspace-manager/src/config.rs: +9 lines (tilde expansion in configs)
 - workspace-manager/src/cli.rs: +42 lines (flake integration, CLI args update)
 - Total: +51 lines of production code
 - 2 commits: bugfix (6af5385) + feature (9d0bf9d)
+
+**Documentation Changes Session 4**:
+- CLAUDE.md: +5 lines (TEST SAFETY RULES section)
+- CLAUDE.md: +16 lines (Session 4 safety review documentation)
+- Total: +21 lines of safety documentation
+- 0 commits (documentation only, pending user review)
 
 **Build Status**: ✅ cargo check passes | ✅ cargo test passes (9 tests)
 
@@ -162,16 +193,20 @@ Plan integration of existing Rust AST system into new unified project.
 
 **Quick Resume Command**: "Begin work on your top-priority task"
 
-**Expected Action**: Phase 2 Priority 3 - Configuration Management Enhancements
-- Review current cmd_init implementation (workspace-manager/src/cli.rs:151-186)
-- Consider enhancements:
-  - Interactive configuration wizard
-  - Validation of paths before saving
-  - Support for per-repo .workspace.toml configs
-  - Better defaults detection (current branch, repo root)
-- OR proceed directly to Phase 3: Python test migration to Rust
+**Expected Action**: Choose between Phase 2 Priority 3 OR Phase 3
+- **Option A**: Phase 2 Priority 3 - Configuration Management Enhancements
+  - Implement per-workspace git config storage (HIGH priority from test analysis)
+  - Review current cmd_init implementation (workspace-manager/src/cli.rs:160-207)
+  - Python tests show 60+ tests for config management (test_config.py, test_per_workspace_config.py)
+  - Add configuration display/management commands (config show, config import)
 
-**Current Focus**: Phase 2 Priority 3 (Configuration) OR Phase 3 (Testing)
+- **Option B**: Phase 3 - Begin Python Test Migration
+  - 728+ Python tests to migrate to native Rust
+  - Start with core functionality tests (worktree operations, config management)
+  - More comprehensive validation approach
+  - Session 4 provided detailed test analysis to guide migration
+
+**Current Focus**: Safety-first development established, ready for next feature work
 **Strategic Goal**: Complete unified workspace manager with robust configuration
 **Migration Progress**:
   - ✅ Core infrastructure (Phase 1)
