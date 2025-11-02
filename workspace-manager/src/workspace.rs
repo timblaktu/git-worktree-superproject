@@ -28,7 +28,8 @@ pub trait RepositoryOps: Send + Sync {
     fn clone_repo(&self, url: &str, path: &Path, branch: &str) -> Result<()>;
 
     /// Pull updates from the remote repository
-    fn pull(&self, path: &Path) -> Result<()>;
+    /// Returns Ok(true) if changes were pulled, Ok(false) if already up-to-date
+    fn pull(&self, path: &Path) -> Result<bool>;
 
     /// Get the current status of the repository
     fn get_status(&self, path: &Path) -> Result<RepoStatus>;
@@ -321,7 +322,7 @@ impl RepositoryOps for RealRepositoryOps {
         Ok(())
     }
 
-    fn pull(&self, path: &Path) -> Result<()> {
+    fn pull(&self, path: &Path) -> Result<bool> {
         use git2::{BranchType, Repository};
 
         let repo = Repository::open(path)?;
@@ -346,15 +347,15 @@ impl RepositoryOps for RealRepositoryOps {
         let analysis = repo.merge_analysis(&[&fetch_commit])?;
 
         if analysis.0.is_up_to_date() {
-            // Already up to date
-            Ok(())
+            // Already up to date - no changes
+            Ok(false)
         } else if analysis.0.is_fast_forward() {
-            // Fast-forward merge
+            // Fast-forward merge - changes pulled
             let mut reference = repo.find_reference(&format!("refs/heads/{}", branch_name))?;
             reference.set_target(fetch_commit.id(), "Fast-forward merge")?;
             repo.set_head(&format!("refs/heads/{}", branch_name))?;
             repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
-            Ok(())
+            Ok(true)
         } else {
             Err(anyhow::anyhow!(
                 "Cannot fast-forward merge; manual intervention required"
@@ -648,8 +649,11 @@ impl WorkspaceManager for WorkspaceManagerImpl {
 
             // Pull updates for non-pinned repos
             match self.repo_ops.pull(&repo_path) {
-                Ok(_) => {
-                    report.repos_updated.push(repo_name.to_string());
+                Ok(changed) => {
+                    // Only report as updated if changes were actually pulled
+                    if changed {
+                        report.repos_updated.push(repo_name.to_string());
+                    }
                 }
                 Err(e) => {
                     report
