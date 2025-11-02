@@ -135,3 +135,4 @@ Plan integration of existing Rust AST system into new unified project.
 - 🔧 **Implementation**: Clean slate with existing Rust AST system integration
 
 **Ready State**: All planning complete, repository prepared, ready for implementation
+- NEVER include Claude or Anthropic or AI in commit messages
