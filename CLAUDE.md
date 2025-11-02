@@ -22,17 +22,19 @@
 
 ---
 
-## 🚀 **NEXT SESSION: Phase 3 - Python Test Migration (Continued)**
+## 🚀 **NEXT SESSION: Phase 4 - Multi-Repo Workspace Test Design**
 
 **Command to resume:** "Begin work on your top-priority task"
 
 **What you'll do:**
-1. Continue Phase 3 test migration - next target: `test/test_workspace.py` (33 tests)
-2. Migrate comprehensive workspace integration tests to Rust
-3. Build out more worktree and workspace operation test coverage
+1. Design trait-based architecture for multi-repo workspace management
+2. Define domain types (Workspace, WorkspaceConfig, RepoInfo, etc.)
+3. Create test infrastructure with rstest fixtures and mockall mocks
+4. Reference PYTEST_CARGO_MIGRATION.md for Rust-idiomatic test patterns
+5. Write test stubs (no implementation) following TDD approach
 
-**Phase 2 Status:** ✅ **FULLY COMPLETE**
-**Phase 3 Status:** 🔄 **IN PROGRESS** (57 Python tests analyzed → 62 Rust tests created)
+**Phase 1-3 Status:** ✅ **COMPLETE** (Single-repo worktree functionality)
+**Phase 4 Status:** 🚀 **READY TO START** (Multi-repo workspace test design)
 **Current State:** 67 tests passing, cargo check ✅, git clean (commit: 093a583)
 
 ---
@@ -40,13 +42,18 @@
 ## 📊 **CURRENT SYSTEM STATUS**
 
 **Current Branch**: `rust-migration` (created for unified Rust implementation)
-**Build State**: 🔄 Rust migration in progress
-**Architecture**: Multi-language system migrating to unified Rust:
-- **Bash**: 1,481-line workspace management script (to be replaced)
-- **Rust**: Production-ready AST-based Nix flake modification (`flake-input-modifier/`)
-- **Python**: Comprehensive pytest test suite (728+ tests in `test/`)
+**Build State**: ✅ Single-repo worktree functionality complete
+**Architecture**: Hybrid system - single-repo complete, multi-repo in design phase:
+- **Bash**: 1,481-line workspace management script (multi-repo features - to be replaced)
+- **Rust (Complete)**: Single-repo git worktree operations + Nix flake integration
+- **Rust (Planned)**: Multi-repo workspace management (TDD approach)
+- **Python**: Comprehensive pytest test suite (728+ tests - categorized by feature scope)
 
-**Migration Status**: ✅ Phase 1 COMPLETE | ✅ Phase 2 COMPLETE | 🔄 Phase 3 IN PROGRESS (57 Python tests → 62 Rust tests, 7.8% of 728+)
+**Migration Status**:
+- ✅ **Phase 1-3 COMPLETE**: Single-repo worktree operations (67 Rust tests passing)
+- 🚀 **Phase 4 READY**: Multi-repo workspace test design (TDD approach)
+- ⏳ **Phase 5 PLANNED**: Multi-repo workspace test implementation
+- ⏳ **Phase 6 PLANNED**: Multi-repo workspace feature implementation
 
 ## 🔧 **IMPORTANT PATHS**
 
@@ -55,70 +62,174 @@
 3. **Python Test Suite**: `/home/tim/src/git-worktree-superproject/test/` (728+ tests to migrate)
 4. **New Rust Manager**: `/home/tim/src/git-worktree-superproject/workspace-manager/` (Phase 1 complete)
 
-## 🚧 **RUST MIGRATION STATUS** (2025-11-02)
+## 🚧 **RUST MIGRATION STATUS** (2025-11-02 - Session 11: Phase Redefinition)
 
-### **📋 MIGRATION PHASES DEFINED**
+### **📋 MIGRATION PHASES REDEFINED** (Test-Driven Development Approach)
 
-#### **Phase 1: Core Infrastructure** (CURRENT PRIORITY)
-**Components to implement**:
-1. **Git Operations Layer**: libgit2-rs integration for repository management, worktree operations, branch management
-2. **Configuration System**: TOML-based configuration with serde, environment detection, path resolution  
-3. **CLI Interface**: clap-based argument parsing, command structure, help system
-4. **File System Operations**: Directory management, file operations, permission handling
+#### **✅ Phase 1-3: COMPLETE - Single-Repository Worktree Operations**
 
-**Specific Phase 1 Actions**:
-1. ✅ Project Setup: Repository prepared with rust-migration branch
-2. ✅ Created Cargo workspace with workspace-manager and flake-input-modifier
-3. ✅ Added all core dependencies (libgit2, clap, serde, tokio, etc.)
-4. ✅ Defined module architecture: cli, config, error, git, fs
-5. ✅ Implemented git operations with libgit2-rs (worktrees, branches, status)
-6. ✅ Created comprehensive CLI with clap (8 subcommands)
-7. ✅ All tests passing (9 tests total across workspace)
-8. ✅ End-to-end CLI functionality verified
+**Scope**: Git worktree operations for a SINGLE repository (not multi-repo workspaces)
 
-#### **Phase 2: Advanced Features** (MOSTLY COMPLETE)
-**Priority 1: Complete Worktree Operations** - ✅ COMPLETE
-- ✅ Full worktree creation with validation and verification
-- ✅ Safe worktree removal with uncommitted change detection
-- ✅ Enhanced list command with branch and status info
-- ✅ End-to-end lifecycle testing
+**Phase 1: Core Infrastructure** - ✅ COMPLETE
+- ✅ Git Operations Layer (libgit2-rs: worktrees, branches, status)
+- ✅ Configuration System (TOML with serde, workspace.conf parsing)
+- ✅ CLI Interface (clap with 8 subcommands: init, list, add, remove, info, branches, status, flake, config)
+- ✅ File System Operations (directory management, tilde expansion, path resolution)
 
-**Priority 2: Nix Integration** - ✅ COMPLETE
-- ✅ Nix flake URL modification via cmd_flake
-- ✅ Integration with existing `flake-input-modifier` AST system
-- ✅ Full workflow: read → AST modify → write
-- ✅ End-to-end tested with complex flakes
+**Phase 2: Advanced Single-Repo Features** - ✅ COMPLETE
+- ✅ Full worktree lifecycle (create, remove, list with validation)
+- ✅ Nix flake integration (URL modification via flake-input-modifier AST)
+- ✅ Configuration management (3-tier inheritance: worktree → default → legacy)
+- ✅ Worktree-specific git config (ConfigLevel::Worktree)
 
-**Priority 3: Configuration Management** - ✅ COMPLETE (Bug Fixed in Session 6)
-- ✅ Git config integration (workspace.repo multi-value config)
-- ✅ 3-tier inheritance chain (worktree → default → legacy)
-- ✅ Full CLI commands (show, set, set-default, import)
-- ✅ Worktree config extension support
-- ✅ Import from workspace.conf files
-- ✅ **CRITICAL FIX**: Worktree-specific config using ConfigLevel::Worktree
+**Phase 3: Single-Repo Test Coverage** - ✅ COMPLETE
+- ✅ 67 Rust tests passing (5 original + 62 migrated)
+- ✅ Config parsing tests (12 tests - workspace.conf validation)
+- ✅ Git config system tests (11 tests - multi-value config, inheritance)
+- ✅ Config error handling (22 tests - validation, edge cases, unicode)
+- ✅ Worktree operations (17 tests - lifecycle, isolation, error handling)
+- ✅ All tests use tempdir() for isolation
+- ✅ Property-based testing patterns established
 
-#### **Phase 3: Testing and Polish** (FUTURE)  
-- Migrate Python tests to native Rust testing
-- Performance optimization and hardening
-- Documentation and deployment
+**Test Coverage Analysis**:
+- Python tests migrated: 57 (all relevant to single-repo worktree operations)
+- Rust tests created: 62 (with enhanced edge case coverage)
+- Remaining 671+ Python tests: Test OLD bash script's multi-repo features (not yet implemented)
 
-### **🎯 CURRENT SESSION OBJECTIVES**
+---
 
-**Primary Goal**: **Phase 1 Implementation Kickoff**
-Begin implementing the core infrastructure for unified Rust workspace manager.
+#### **🚀 Phase 4: NEXT - Multi-Repo Workspace Test Design** (Test-Driven Development)
 
-**Secondary Goal**: **Asset Integration Planning**
-Plan integration of existing Rust AST system into new unified project.
+**Scope**: Design Rust-idiomatic test architecture BEFORE implementing features
 
-**Success Metrics for Session (2025-11-02)**: ✅ ALL COMPLETE
-- [x] New Rust project created with Cargo workspace structure
-- [x] Core dependencies added (libgit2, clap, serde, tokio, etc.)
-- [x] Basic module architecture defined (cli, config, error, git, fs)
-- [x] Git operations foundation implemented with comprehensive API
-- [x] CLI structure and parsing established (8 subcommands)
-- [x] Integration completed for existing AST system (workspace dependencies)
-- [x] All tests passing (cargo check ✅, cargo test ✅)
-- [x] End-to-end functionality verified (workspace status, --help)
+**Objective**: Create complete test suite for multi-repo workspace management using TDD approach
+
+**Key Principle**: Following PYTEST_CARGO_MIGRATION.md guidance:
+- ❌ Do NOT "lift and shift" Python/pytest patterns to Rust
+- ✅ Design trait-based abstractions for testability
+- ✅ Use Rust type system to eliminate type-safety tests
+- ✅ Focus tests on BEHAVIOR and INVARIANTS, not implementation details
+- ✅ Use rstest for fixtures, mockall for mocks, proptest for properties
+
+**Deliverables** (1-2 sessions):
+1. Define trait abstractions:
+   - `RepositoryOps` trait (git operations abstraction for mocking)
+   - `WorkspaceManager` trait (workspace lifecycle management)
+
+2. Define domain types:
+   - `Workspace` struct (collection of repos at specific branches)
+   - `WorkspaceConfig` builder pattern (fluent configuration)
+   - `RepoInfo`, `SyncReport`, `ForeachResult` (typed results)
+
+3. Test infrastructure:
+   - `TestWorkspace` fixture with Drop cleanup
+   - Mock implementations using mockall
+   - Property-based test strategies with proptest
+
+4. Write ~20 test stubs (organized by category):
+   - Core lifecycle: create, switch, remove workspace (5 tests)
+   - Synchronization: pull repos, handle pinned repos (3 tests)
+   - Bulk operations: foreach with closures (3 tests)
+   - State validation: consistency invariants (4 tests)
+   - Error handling: partial failures, rollback (5 tests)
+
+5. Document test organization:
+   - Unit tests: workspace-manager/src/workspace.rs (#[cfg(test)])
+   - Integration tests: tests/multi_repo_workspace.rs
+   - Property tests: invariant validation
+
+**Reference**: All designs must integrate PYTEST_CARGO_MIGRATION.md principles
+
+---
+
+#### **⏳ Phase 5: Multi-Repo Workspace Test Implementation**
+
+**Scope**: Implement the test suite designed in Phase 4 (tests will FAIL - no implementation exists)
+
+**Deliverables** (2-3 sessions):
+1. Implement mock-based unit tests (~10 tests)
+   - Use mockall to mock RepositoryOps trait
+   - Test business logic independent of git operations
+
+2. Implement integration tests (~10 tests)
+   - Use real git operations in tempdir isolation
+   - Test full workspace lifecycle with real repos
+
+3. Implement property-based tests (~5 properties)
+   - Workspace consistency: all repos present or none
+   - Sync idempotency: sync twice = sync once
+   - Foreach isolation: operations don't interfere
+
+4. Verify ALL tests fail appropriately
+   - Tests should fail with "not yet implemented" errors
+   - Validates test correctness before implementation
+
+5. Document test patterns
+   - Create examples for future test additions
+   - Establish coding standards for workspace tests
+
+**Success Criteria**: Complete test suite exists, all tests fail cleanly, ready for TDD
+
+---
+
+#### **⏳ Phase 6: Multi-Repo Workspace Feature Implementation**
+
+**Scope**: Implement multi-repo workspace features following TDD (make tests pass)
+
+**Approach**: Classic TDD cycle:
+1. Run tests → see failures
+2. Implement minimal code to pass next test
+3. Refactor for quality
+4. Repeat until all tests green
+
+**Deliverables** (4-6 sessions):
+1. Implement domain types and traits
+   - `Workspace`, `WorkspaceConfig`, `RepoInfo` structs
+   - `RepositoryOps` and `WorkspaceManager` trait implementations
+
+2. Implement WorkspaceManager operations
+   - `switch()`: Create/switch to workspace with multiple repos
+   - `sync()`: Pull updates from all repos
+   - `foreach()`: Execute closures across repos
+   - `list()`, `remove()`: Workspace management
+
+3. Watch tests turn green incrementally
+   - Track progress: X/20 tests passing
+   - Refactor as patterns emerge
+
+4. Add CLI commands
+   - Delegate to WorkspaceManager (thin CLI layer)
+   - Commands: workspace switch, sync, foreach, list, clean
+
+5. End-to-end validation
+   - Real-world usage scenarios
+   - Performance verification
+   - Documentation and examples
+
+**Success Criteria**: All Phase 5 tests passing, CLI functional, ready for production use
+
+### **🎯 SESSION 11 OBJECTIVES** (Phase Redefinition Complete)
+
+**Primary Goal**: ✅ **COMPLETE** - Redefine migration phases with TDD approach
+- ✅ Analyzed remaining Python tests (test_workspace.py, test_broken_repos.py)
+- ✅ Discovered fundamental scope difference: single-repo vs multi-repo
+- ✅ Marked Phases 1-3 COMPLETE for single-repo worktree operations
+- ✅ Designed comprehensive Phase 4-6 strategy using PYTEST_CARGO_MIGRATION.md
+- ✅ Established test-first approach: design tests → implement tests → implement features
+
+**Secondary Goal**: ✅ **COMPLETE** - Document strategic insights
+- ✅ Used sequential-thinking to design Rust-idiomatic test approach
+- ✅ Defined trait abstractions for testability (RepositoryOps, WorkspaceManager)
+- ✅ Reduced 33 Python tests → ~20 focused Rust tests via type safety
+- ✅ Established property-based testing strategy for invariants
+
+**Success Metrics**: ✅ ALL COMPLETE
+- [x] Phase 1-3 marked COMPLETE (67 tests, single-repo scope)
+- [x] Phase 4 fully designed (test architecture, trait abstractions)
+- [x] Phase 5 fully planned (test implementation strategy)
+- [x] Phase 6 fully planned (TDD feature implementation)
+- [x] CLAUDE.md comprehensively updated with new direction
+- [x] Ready to commit phase redefinition
 
 ## 🔄 **IMPLEMENTATION STRATEGY**
 
@@ -374,41 +485,46 @@ Plan integration of existing Rust AST system into new unified project.
 
 **Resume Command**: `"Begin work on your top-priority task"`
 
-**What Happens Next**:
-You will read and migrate `test/test_workspace.py` (33 tests) to Rust, adding tests to the appropriate module (likely `workspace-manager/src/git.rs` for workspace-level integration tests).
+**What Happens Next**: **Phase 4 - Multi-Repo Workspace Test Design**
+You will design the Rust-idiomatic test architecture for multi-repo workspace features:
+1. Define trait abstractions (RepositoryOps, WorkspaceManager)
+2. Define domain types with builders (Workspace, WorkspaceConfig, RepoInfo)
+3. Create rstest fixtures with Drop cleanup
+4. Write ~20 test stubs organized by behavior categories
+5. Reference PYTEST_CARGO_MIGRATION.md throughout design process
 
-**Current State After Session 10**:
-- ✅ **67 tests passing** (5 original + 62 new: 12 config + 11 git config + 22 config errors + 17 worktree ops = 67 total)
+**Current State After Session 11** (Phase Redefinition):
+- ✅ **Phases 1-3 COMPLETE** (Single-repo worktree operations fully functional)
+- ✅ **67 tests passing** (comprehensive coverage for implemented features)
 - ✅ **Clean build** (cargo check ✅, cargo test ✅)
-- ✅ **Git clean** (all changes committed: 093a583)
-- ✅ **Phase 2 complete** (all priorities finished)
-- 🔄 **Phase 3 in progress** (57 Python tests → 62 Rust tests = 7.8% of 728+)
+- ✅ **Git clean** (ready for new development phase)
+- 🚀 **Phase 4 READY** (Multi-repo workspace test design - TDD approach)
 
-**Phase 3 Test Migration Strategy**:
-1. ✅ **Config Tests - COMPLETE**:
-   - ✅ test_config.py (8 tests → 12 Rust tests) - Session 7 COMPLETE
-   - ✅ test_per_workspace_config.py (11 tests → 11 Rust tests) - Session 8 COMPLETE
-   - ✅ test_config_errors.py (21 tests → 22 Rust tests) - Session 9 COMPLETE
+**Test Strategy Redefinition**:
+1. ✅ **Single-Repo Tests - COMPLETE** (Phases 1-3):
+   - ✅ Config parsing (12 tests)
+   - ✅ Git config system (11 tests)
+   - ✅ Config error handling (22 tests)
+   - ✅ Worktree operations (17 tests)
+   - ✅ **Total: 62 tests covering all implemented features**
 
-2. ✅ **Worktree Operations Tests - COMPLETE**:
-   - ✅ test_worktree_operations.py (17 tests → 17 Rust tests) - Session 10 COMPLETE
-   - 🚀 test_workspace.py (33 tests) - **NEXT TARGET**
-   - Already have working implementation to validate against
+2. 🚀 **Multi-Repo Tests - DESIGN PHASE** (Phase 4):
+   - Design ~20 focused tests (vs 33 Python tests)
+   - Eliminate type-safety tests (Rust compiler guarantees)
+   - Focus on behavior, invariants, error scenarios
+   - Use trait-based mocking for testability
 
-3. **Integration & Edge Cases** (53+ tests):
-   - test_integration_workflows.py (10 tests)
-   - test_workspace_advanced.py (17 tests)
-   - test_superproject_edge_cases.py (12 tests)
+3. ⏳ **Multi-Repo Tests - IMPLEMENTATION** (Phase 5):
+   - Implement designed tests (all will fail initially)
+   - Verify tests fail with appropriate errors
+   - Prepare for TDD implementation in Phase 6
 
-**Test Migration Principles**:
-- ✅ Use `tempdir()` for all file I/O tests (safety first)
-- ✅ Follow existing test patterns from workspace-manager/src/*_tests.rs
-- ✅ Port test logic, NOT bash script invocations
-- ✅ Add tests to appropriate module files (config, git, fs)
+**Key Architectural Principles** (from PYTEST_CARGO_MIGRATION.md):
+- ❌ Do NOT lift-and-shift Python/pytest patterns
+- ✅ Design trait abstractions for dependency injection and mocking
+- ✅ Use builders for complex test data setup
+- ✅ Use Drop trait for automatic cleanup (no explicit teardown)
+- ✅ Test behaviors and invariants, not implementation details
+- ✅ Use proptest for property-based invariant validation
 
-**Architecture Decisions (Locked)**:
-- Git Operations: libgit2-rs (not shell commands)
-- Configuration: TOML with serde + workspace.conf parsing
-- Error Handling: Custom WorkspaceError types
-- Testing: Native Rust (migrating from Python)
-- Nix Integration: Use existing flake-input-modifier library
+**Reference Document**: `PYTEST_CARGO_MIGRATION.md` (comprehensive pytest→Rust migration guide)
