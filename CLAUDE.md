@@ -596,40 +596,47 @@
 
 **Resume Command**: `"Begin work on your top-priority task"`
 
-**What Happens Next**: **Phase 5 - Multi-Repo Workspace Test Implementation**
+**What Happens Next**: **Phase 6 - Multi-Repo Workspace Feature Implementation (TDD)**
 
-Phase 4 test design is COMPLETE. Phase 5 is about implementing the test bodies (not the features yet):
-1. The 28 test stubs currently exist and compile but panic at "not yet implemented"
-2. Phase 5 will implement the test LOGIC (assertions, setup, etc.) - tests will still FAIL
-3. This establishes exactly what behavior we expect before writing any production code
-4. Phase 6 will then implement the features to make the tests pass (classic TDD)
+Phase 5 test implementation is COMPLETE. Phase 6 is about implementing features to make tests pass:
+1. All 28 tests are fully implemented with comprehensive assertions
+2. Tests compile successfully but fail at unimplemented methods (as expected)
+3. Phase 6 will implement features following classic TDD: red → green → refactor
+4. Start with `switch()` - the foundation method that most tests depend on
 
-**What you'll implement in Phase 5**:
-- Flesh out mockall expectations in unit tests
-- Complete real git operations setup in integration tests
-- Finish property test strategies and invariant checks
-- Ensure all tests compile and fail with meaningful error messages
-- Note: Tests WILL fail because features aren't implemented yet (that's Phase 6)
+**What you'll implement in Phase 6**:
+- Implement `RealRepositoryOps` using libgit2-rs for actual git operations
+- Implement `WorkspaceManagerImpl::switch()` to create/switch workspaces
+- Implement `sync()`, `foreach()`, `list()`, `remove()`, `status()` incrementally
+- Watch tests turn green as features are implemented
+- Refactor for quality once tests pass
 
-**Current State After Session 12** (Phase 4 Complete):
-- ✅ **Phase 4 COMPLETE** (Multi-repo workspace test design)
-- ✅ **28 test stubs created** (5 unit + 19 integration + 4 property)
-- ✅ **Test infrastructure ready** (TestWorkspace, TestGitRepos fixtures)
-- ✅ **All tests compile** (cargo check ✅)
-- ✅ **Trait abstractions defined** (RepositoryOps, WorkspaceManager with #[cfg_attr(test, automock)])
-- ✅ **72 unit tests passing** (Phase 1-3 single-repo tests)
-- 🚀 **Ready for Phase 5** (implement test bodies)
+**Current State After Session 13** (Phase 5 Complete):
+- ✅ **Phase 1-3 COMPLETE** (Single-repo worktree operations - 72 tests passing)
+- ✅ **Phase 4 COMPLETE** (Multi-repo test design - 28 test stubs created)
+- ✅ **Phase 5 COMPLETE** (Multi-repo test implementation - full assertions added)
+- ✅ **All tests compile** (cargo check ✅, cargo test --lib ✅)
+- ✅ **Unit tests passing** (72 tests: 67 Phase 1-3 + 5 Phase 5 multi-repo)
+- ✅ **Integration tests ready** (19 tests with comprehensive assertions)
+- ✅ **Property tests ready** (4 tests validating critical invariants)
+- 🚀 **Ready for Phase 6** (TDD implementation)
 
 **Phase Status Summary**:
 1. ✅ **Phase 1-3 COMPLETE** - Single-repo worktree operations (72 tests passing)
 2. ✅ **Phase 4 COMPLETE** - Multi-repo test design (28 test stubs, traits, types, fixtures)
-3. 🚀 **Phase 5 NEXT** - Multi-repo test implementation (make tests fail meaningfully)
-4. ⏳ **Phase 6 PLANNED** - Multi-repo feature implementation (make tests pass via TDD)
+3. ✅ **Phase 5 COMPLETE** - Multi-repo test implementation (full assertions, ready for TDD)
+4. 🚀 **Phase 6 NEXT** - Multi-repo feature implementation (make tests pass via TDD)
 
-**Key Files for Phase 5**:
-- workspace-manager/src/workspace.rs (traits + 5 unit test stubs)
-- workspace-manager/tests/multi_repo_workspace.rs (19 integration test stubs)
-- workspace-manager/tests/workspace_properties.rs (4 property test stubs)
-- workspace-manager/tests/common/mod.rs (test infrastructure - already complete)
+**Key Files for Phase 6**:
+- workspace-manager/src/workspace.rs (implement WorkspaceManager trait methods)
+- workspace-manager/src/git.rs (may need additional git operations for multi-repo)
+- Start with: `WorkspaceManagerImpl::switch()` - foundation for all other operations
 
-**Critical Insight**: The test stubs currently panic at the FIRST unimplemented call (usually `switch()`), not necessarily the method they're testing. This is expected and correct - Phase 5 will establish the full test logic, Phase 6 will implement the features.
+**TDD Strategy for Phase 6**:
+1. Run tests to see which fail first
+2. Implement minimal code to make one test pass
+3. Refactor for quality
+4. Repeat until all 28 tests pass
+5. Track progress: X/28 tests passing
+
+**Expected First Task**: Implement `switch()` method to create workspaces with multiple repos, which will unblock most integration tests that call it in setup.
