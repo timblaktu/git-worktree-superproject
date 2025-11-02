@@ -1,4 +1,5 @@
 use crate::error::{Result, WorkspaceError};
+use crate::fs::FileSystem;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -21,8 +22,14 @@ impl Config {
         let contents = std::fs::read_to_string(path)
             .map_err(|e| WorkspaceError::ConfigError(format!("Failed to read config: {}", e)))?;
 
-        toml::from_str(&contents)
-            .map_err(|e| WorkspaceError::ConfigError(format!("Failed to parse config: {}", e)))
+        let mut config: Self = toml::from_str(&contents)
+            .map_err(|e| WorkspaceError::ConfigError(format!("Failed to parse config: {}", e)))?;
+
+        // Expand tilde in paths
+        config.worktree_base = FileSystem::expand_tilde(&config.worktree_base);
+        config.main_repo = FileSystem::expand_tilde(&config.main_repo);
+
+        Ok(config)
     }
 
     /// Save configuration to a TOML file
@@ -40,7 +47,7 @@ impl Config {
     /// Create default configuration
     pub fn default_config() -> Self {
         Self {
-            worktree_base: PathBuf::from("~/.worktrees"),
+            worktree_base: FileSystem::expand_tilde(&PathBuf::from("~/.worktrees")),
             main_repo: PathBuf::from("."),
             default_branch: "main".to_string(),
             enable_nix: true,
