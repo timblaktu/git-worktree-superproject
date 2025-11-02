@@ -252,6 +252,63 @@ impl GitOps {
             untracked,
         })
     }
+
+    /// Get all values for a git config key (for multi-value configs like workspace.repo)
+    pub fn config_get_all(&self, key: &str) -> Result<Vec<String>> {
+        let config = self.repo.config()?;
+        let mut values = Vec::new();
+
+        // Get all multivar values using multivar iterator
+        if let Ok(mut entries) = config.entries(Some(key)) {
+            while let Some(entry) = entries.next() {
+                if let Ok(entry) = entry {
+                    if let Some(value) = entry.value() {
+                        values.push(value.to_string());
+                    }
+                }
+            }
+        }
+
+        Ok(values)
+    }
+
+    /// Add a value to a multi-value git config key
+    pub fn config_add(&self, key: &str, value: &str) -> Result<()> {
+        let mut config = self.repo.config()?;
+        config.set_multivar(key, "^$", value)?; // ^$ matches nothing, so always adds
+        Ok(())
+    }
+
+    /// Set a git config value (single value)
+    pub fn config_set(&self, key: &str, value: &str) -> Result<()> {
+        let mut config = self.repo.config()?;
+        config.set_str(key, value)?;
+        Ok(())
+    }
+
+    /// Remove all values for a git config key
+    pub fn config_unset_all(&self, key: &str) -> Result<()> {
+        let mut config = self.repo.config()?;
+        config.remove_multivar(key, ".*")?;
+        Ok(())
+    }
+
+    /// Enable worktree config extension
+    pub fn enable_worktree_config(&self) -> Result<()> {
+        self.config_set("extensions.worktreeConfig", "true")?;
+        info!("Enabled worktree config extension");
+        Ok(())
+    }
+
+    /// Check if worktree config extension is enabled
+    pub fn is_worktree_config_enabled(&self) -> bool {
+        if let Ok(config) = self.repo.config() {
+            if let Ok(value) = config.get_bool("extensions.worktreeConfig") {
+                return value;
+            }
+        }
+        false
+    }
 }
 
 /// Information about a worktree

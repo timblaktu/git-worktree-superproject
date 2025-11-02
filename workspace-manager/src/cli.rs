@@ -101,6 +101,57 @@ pub enum Commands {
         #[arg(short = 'n', long)]
         new_url: String,
     },
+
+    /// Manage per-workspace configurations
+    #[command(subcommand)]
+    Config(ConfigCommands),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigCommands {
+    /// Show configuration for a workspace
+    Show {
+        /// Workspace name (defaults to "main")
+        #[arg(default_value = "main")]
+        workspace: String,
+    },
+
+    /// Set repository configuration for a workspace
+    Set {
+        /// Workspace name
+        workspace: String,
+
+        /// Repository URL
+        url: String,
+
+        /// Branch name (optional)
+        branch: Option<String>,
+
+        /// Ref/tag (optional)
+        git_ref: Option<String>,
+    },
+
+    /// Set default repository configuration
+    SetDefault {
+        /// Repository URL
+        url: String,
+
+        /// Branch name (optional)
+        branch: Option<String>,
+
+        /// Ref/tag (optional)
+        git_ref: Option<String>,
+    },
+
+    /// Import configuration from workspace.conf file
+    Import {
+        /// Workspace name
+        workspace: String,
+
+        /// Source file path (defaults to workspace.conf)
+        #[arg(default_value = "workspace.conf")]
+        source_file: PathBuf,
+    },
 }
 
 /// Parse command-line arguments
@@ -152,6 +203,32 @@ pub fn execute_command(args: Args) -> Result<()> {
         } => {
             cmd_flake(file, input, old_url, new_url)?;
         }
+        Commands::Config(config_cmd) => match config_cmd {
+            ConfigCommands::Show { workspace } => {
+                cmd_config_show(config, workspace)?;
+            }
+            ConfigCommands::Set {
+                workspace,
+                url,
+                branch,
+                git_ref,
+            } => {
+                cmd_config_set(config, workspace, url, branch, git_ref)?;
+            }
+            ConfigCommands::SetDefault {
+                url,
+                branch,
+                git_ref,
+            } => {
+                cmd_config_set_default(config, url, branch, git_ref)?;
+            }
+            ConfigCommands::Import {
+                workspace,
+                source_file,
+            } => {
+                cmd_config_import(config, workspace, source_file)?;
+            }
+        },
     }
 
     Ok(())
@@ -508,6 +585,216 @@ fn cmd_flake(file: PathBuf, input: String, old_url: String, new_url: String) -> 
     println!("  File: {}", file.display());
     println!("  Old URL: {}", old_url);
     println!("  New URL: {}", new_url);
+
+    Ok(())
+}
+
+// ============================================================================
+// Config Management Commands
+// ============================================================================
+
+fn cmd_config_show(config: Config, workspace: String) -> Result<()> {
+    let git = GitOps::discover(&config.main_repo)?;
+
+    // Enable worktree config if not already enabled
+    if !git.is_worktree_config_enabled() {
+        git.enable_worktree_config()?;
+    }
+
+    let worktree_path = config.worktree_base.join(&workspace);
+
+    // Check if workspace exists
+    let workspace_exists = worktree_path.exists() && git.has_worktree(&workspace);
+
+    println!("Configuration for workspace '{}':", workspace);
+    println!();
+
+    // Priority 1: Worktree-specific config
+    if workspace_exists {
+        let worktree_git = GitOps::open(&worktree_path)?;
+        let worktree_configs = worktree_git.config_get_all("workspace.repo")?;
+
+        if !worktree_configs.is_empty() {
+            println!("Workspace-specific repositories:");
+            for config_line in worktree_configs {
+                println!("  {}", config_line);
+            }
+            println!();
+            return Ok(());
+        }
+    }
+
+    // Priority 2: Default (superproject) config
+    let default_configs = git.config_get_all("workspace.repo")?;
+    if !default_configs.is_empty() {
+        println!("Default repositories (inherited):");
+        for config_line in default_configs {
+            println!("  {}", config_line);
+        }
+        println!();
+        return Ok(());
+    }
+
+    // Priority 3: Legacy workspace.conf file
+    let workspace_conf = std::env::current_dir()?.join("workspace.conf");
+    if workspace_conf.exists() {
+        println!("Legacy configuration (from workspace.conf):");
+        let content = std::fs::read_to_string(&workspace_conf)?;
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                println!("  {}", trimmed);
+            }
+        }
+        println!();
+        return Ok(());
+    }
+
+    println!("No configuration found");
+    Ok(())
+}
+
+fn cmd_config_set(
+    config: Config,
+    workspace: String,
+    url: String,
+    branch: Option<String>,
+    git_ref: Option<String>,
+) -> Result<()> {
+    let git = GitOps::discover(&config.main_repo)?;
+
+    // Enable worktree config if not already enabled
+    if !git.is_worktree_config_enabled() {
+        git.enable_worktree_config()?;
+    }
+
+    let worktree_path = config.worktree_base.join(&workspace);
+
+    // Check if workspace exists
+    if !worktree_path.exists() {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Worktree '{}' does not exist. Create it first with 'workspace add {}'",
+            workspace, workspace
+        )));
+    }
+
+    if !git.has_worktree(&workspace) {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Worktree '{}' is not tracked by git",
+            workspace
+        )));
+    }
+
+    // Build config value: url branch [ref]
+    let mut config_value = url.clone();
+    let branch_name = branch.as_deref().unwrap_or("main");
+    config_value.push(' ');
+    config_value.push_str(branch_name);
+
+    if let Some(ref_val) = &git_ref {
+        config_value.push(' ');
+        config_value.push_str(ref_val);
+    }
+
+    // Open worktree and set config
+    let worktree_git = GitOps::open(&worktree_path)?;
+    worktree_git.config_add("workspace.repo", &config_value)?;
+
+    println!("Set repository config for workspace '{}':", workspace);
+    println!("  {}", config_value);
+
+    Ok(())
+}
+
+fn cmd_config_set_default(
+    config: Config,
+    url: String,
+    branch: Option<String>,
+    git_ref: Option<String>,
+) -> Result<()> {
+    let git = GitOps::discover(&config.main_repo)?;
+
+    // Enable worktree config if not already enabled
+    if !git.is_worktree_config_enabled() {
+        git.enable_worktree_config()?;
+    }
+
+    // Build config value: url branch [ref]
+    let mut config_value = url.clone();
+    let branch_name = branch.as_deref().unwrap_or("main");
+    config_value.push(' ');
+    config_value.push_str(branch_name);
+
+    if let Some(ref_val) = &git_ref {
+        config_value.push(' ');
+        config_value.push_str(ref_val);
+    }
+
+    // Set in superproject config
+    git.config_add("workspace.repo", &config_value)?;
+
+    println!("Set default repository config:");
+    println!("  {}", config_value);
+
+    Ok(())
+}
+
+fn cmd_config_import(config: Config, workspace: String, source_file: PathBuf) -> Result<()> {
+    let git = GitOps::discover(&config.main_repo)?;
+
+    // Enable worktree config if not already enabled
+    if !git.is_worktree_config_enabled() {
+        git.enable_worktree_config()?;
+    }
+
+    // Verify source file exists
+    if !source_file.exists() {
+        return Err(WorkspaceError::ConfigError(format!(
+            "Source file not found: {}",
+            source_file.display()
+        )));
+    }
+
+    let worktree_path = config.worktree_base.join(&workspace);
+
+    // Check if workspace exists, if not create it
+    if !worktree_path.exists() || !git.has_worktree(&workspace) {
+        info!("Workspace '{}' does not exist, creating it", workspace);
+        git.add_worktree(
+            &workspace,
+            &worktree_path,
+            Some(&format!("workspace/{}", workspace)),
+        )?;
+    }
+
+    // Open worktree
+    let worktree_git = GitOps::open(&worktree_path)?;
+
+    // Clear existing worktree-specific config
+    let _ = worktree_git.config_unset_all("workspace.repo");
+
+    // Read and import configuration
+    let content = std::fs::read_to_string(&source_file)?;
+    let mut imported_count = 0;
+
+    println!("Importing configuration to workspace: {}", workspace);
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // Skip comments and empty lines
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        // Import the line as-is
+        worktree_git.config_add("workspace.repo", trimmed)?;
+        println!("  Imported: {}", trimmed);
+        imported_count += 1;
+    }
+
+    println!();
+    println!("Import complete: {} repositories imported", imported_count);
 
     Ok(())
 }
