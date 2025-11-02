@@ -17,7 +17,7 @@
 - **Rust**: Production-ready AST-based Nix flake modification (`flake-input-modifier/`)
 - **Python**: Comprehensive pytest test suite (728+ tests in `test/`)
 
-**Migration Status**: ✅ Phase 1 foundation COMPLETE - Core infrastructure implemented and tested
+**Migration Status**: ✅ Phase 1 COMPLETE | 🚀 Phase 2 Priority 1 COMPLETE - Full worktree lifecycle implemented
 
 ## 🔧 **IMPORTANT PATHS**
 
@@ -47,10 +47,20 @@
 7. ✅ All tests passing (9 tests total across workspace)
 8. ✅ End-to-end CLI functionality verified
 
-#### **Phase 2: Advanced Features** (FUTURE)
+#### **Phase 2: Advanced Features** (IN PROGRESS)
+**Priority 1: Complete Worktree Operations** - ✅ COMPLETE
+- ✅ Full worktree creation with validation and verification
+- ✅ Safe worktree removal with uncommitted change detection
+- ✅ Enhanced list command with branch and status info
+- ✅ End-to-end lifecycle testing
+
+**Priority 2: Nix Integration** - NEXT
 - Nix integration and flake operations
-- Repository management and state tracking
 - Integration with existing `flake-input-modifier` AST system
+
+**Priority 3: Configuration Management** - PENDING
+- Repository management and state tracking
+- Configuration detection and validation
 
 #### **Phase 3: Testing and Polish** (FUTURE)  
 - Migrate Python tests to native Rust testing
@@ -91,51 +101,65 @@ Plan integration of existing Rust AST system into new unified project.
 - **Single-User Optimization**: No need for complex configuration compatibility
 - **Test Migration**: Gradual migration of Python tests to native Rust tests
 
-## 📋 **CURRENT TASKS** (2025-11-02 - Session Complete)
+## 📋 **CURRENT TASKS** (2025-11-02 - Session 2 Complete)
 
-**Status**: ✅ Phase 1 Foundation COMPLETE - Ready for Phase 2
+**Status**: ✅ Phase 2 Priority 1 COMPLETE - Full worktree lifecycle implemented
 
-⚠️ **FOR NEXT SESSION**: Read `NEXT_SESSION.md` for detailed Phase 2 implementation plan
+⚠️ **FOR NEXT SESSION**: Begin Phase 2 Priority 2 - Nix flake integration
 
-**Completed This Session**:
-- [x] Created Cargo workspace with workspace-manager and integrated flake-input-modifier
-- [x] Implemented all core modules: cli, config, error, git, fs (1,000+ lines)
-- [x] Added comprehensive git operations (worktrees, branches, status, repository management)
-- [x] Created full CLI with 8 subcommands (init, list, add, remove, info, branches, status, flake)
-- [x] All dependencies configured with workspace inheritance
-- [x] All tests passing (9 total: 6 workspace-manager, 2 flake-input-modifier, 1 CLI)
-- [x] End-to-end functionality verified (workspace --help, workspace status)
-- [x] All changes committed to rust-migration branch (commits: 3973a31, 7d7bda3)
+**Completed This Session (Session 2)**:
+- [x] ✅ Enhanced cmd_add with comprehensive validation and verification (workspace-manager/src/cli.rs:259-341)
+  - Pre-creation checks: worktree name exists, path collision detection
+  - Branch existence validation with user feedback
+  - Post-creation verification: validate worktree, verify directory exists
+  - Clear success reporting with checkmarks
+- [x] ✅ Implemented safe cmd_remove with uncommitted change detection (workspace-manager/src/cli.rs:343-406)
+  - Safety checks: worktree exists, not locked, uncommitted changes
+  - Force flag support for override
+  - Filesystem directory removal
+  - Fixed libgit2 WorktreeLockStatus handling
+- [x] ✅ Enhanced cmd_list with branch and status info (workspace-manager/src/cli.rs:188-257)
+  - Detailed mode: branch name, status counts, locked/valid state
+  - Simple mode: branch names in brackets
+  - Handles missing directories and detached HEAD
+- [x] ✅ Added worktree_status() to GitOps (workspace-manager/src/git.rs:217-250)
+  - Status summary for specific worktree paths
+  - Used for safety checks in removal
+- [x] ✅ End-to-end lifecycle testing
+  - Created test worktree with new branch
+  - Added files (uncommitted changes detected)
+  - Removal blocked without force (safety check working)
+  - Force removal successful (worktree and directory removed)
+- [x] ✅ All changes committed (commit: 558a903)
 
-**Phase 1 Deliverables**:
-- Working `workspace` binary at `target/release/workspace` (v0.1.0)
-- Comprehensive git operations layer using libgit2-rs (260+ lines)
-- Configuration system with TOML support (90+ lines)
-- CLI framework with clap supporting all major commands (300+ lines)
-- File system utilities module (90+ lines)
-- Custom error types with proper error handling (30+ lines)
-- Integrated flake-input-modifier as workspace dependency
+**Code Changes**:
+- +197 lines implementing robust worktree lifecycle (workspace-manager/src/cli.rs, git.rs)
+- Fixed libgit2 WorktreeLockStatus enum handling
+- Comprehensive error messages and user feedback
 
-**Phase 2 Priority Tasks** (See NEXT_SESSION.md for details):
-1. [ ] **IMMEDIATE**: Complete worktree operations (cmd_add, cmd_remove fully functional)
-2. [ ] **HIGH**: Integrate flake-input-modifier API into cmd_flake
-3. [ ] **MEDIUM**: Implement configuration management (cmd_init)
+**Build Status**: ✅ cargo check passes | ✅ cargo test passes (9 tests)
+
+**Phase 2 Priority Tasks**:
+1. [x] **PRIORITY 1**: Complete worktree operations - ✅ COMPLETE
+2. [ ] **PRIORITY 2**: Integrate flake-input-modifier API into cmd_flake - NEXT
+3. [ ] **PRIORITY 3**: Implement configuration management (cmd_init)
 4. [ ] **ONGOING**: Begin migrating Python tests to Rust
 
 ## 🎯 **NEXT SESSION START**
 
 **Quick Resume Command**: "Begin work on your top-priority task"
 
-**Expected Action**: Read `NEXT_SESSION.md` and start with Priority 1, Task 1:
-- Implement full worktree creation in `cmd_add` (workspace-manager/src/cli.rs:203)
-- Create todo list with TodoWrite
-- Test with real repository operations
+**Expected Action**: Start Phase 2 Priority 2 - Nix Flake Integration:
+- Read flake-input-modifier API documentation (flake-input-modifier/src/lib.rs:130-154)
+- Implement cmd_flake using replace_flake_input_url() function
+- Read flake.nix from filesystem, modify, write back
+- Test with real flake.nix files
 - Commit working implementation
 
-**Current Focus**: Phase 2 - Advanced Features
-**Critical Priority**: Complete worktree operations (create/remove with filesystem)
-**Strategic Goal**: Replace 1,481-line bash script with structured Rust implementation
-**Innovation Opportunity**: Unified codebase with native performance improvements
+**Current Focus**: Phase 2 Priority 2 - Nix Integration
+**Critical Priority**: Integrate flake-input-modifier API into cmd_flake
+**Strategic Goal**: Complete unified workspace manager with Nix flake support
+**Innovation Opportunity**: Seamless worktree + flake modification workflow
 
 **Architecture Decisions** (Locked):
 - ✅ Git Operations: libgit2-rs (not shell commands)
