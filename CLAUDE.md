@@ -22,39 +22,46 @@
 
 ---
 
-## 🚀 **NEXT SESSION: Ready for Production Use or CLI Integration**
+## 🚀 **NEXT SESSION: Phase 6 CLI Integration**
 
 **Command to resume:** "Begin work on your top-priority task"
 
-**Phase 6 Status:** ✅ **100% COMPLETE** - All multi-repo features fully implemented!
+**Phase 6 Status:** ⚠️ **Library Complete, CLI Integration Pending** (~70% complete)
 
 **What's Done:**
-- ✅ All core workspace operations implemented (switch, list, remove, foreach, status, sync)
+- ✅ Library layer: All workspace operations implemented (switch, list, remove, foreach, status, sync)
 - ✅ Workspace config persistence enables stateful operations
 - ✅ Property-based invariants validated across generated inputs
-- ✅ **ALL 167 tests passing (100%)**
+- ✅ **ALL 167 library tests passing (100%)**
 - ✅ foreach() uses sh -c for proper environment variable expansion
 - ✅ Multi-repo workspace creation with pinned repo support
-- ✅ sync() pulls updates from all non-pinned repos
+
+**What's Pending:**
+- ⚠️ **Semantic bug**: sync() reports repos as "updated" even when already up-to-date (pull() needs to return bool)
+- ❌ **CLI integration**: workspace binary doesn't have switch/sync/foreach commands yet
+- ❌ **End-to-end CLI tests**: No tests for actual command-line usage
+- ❌ **Documentation**: User guide not written
 
 **Phase Status:**
 - **Phase 1-3:** ✅ COMPLETE (Single-repo worktree - 72 tests)
 - **Phase 4:** ✅ COMPLETE (Multi-repo test design - 28 test stubs)
 - **Phase 5:** ✅ COMPLETE (Multi-repo test implementation)
-- **Phase 6:** ✅ **100% COMPLETE** (All 167 tests passing)
+- **Phase 6 Library:** ✅ COMPLETE (All 167 tests passing)
+- **Phase 6 CLI:** ❌ NOT STARTED (0% complete)
 
 **Current Test Status:**
 - Unit tests (lib): 72/72 ✅
 - Unit tests (bin): 72/72 ✅
 - Integration tests: 19/19 ✅
 - Property tests: 4/4 ✅
-- **TOTAL: 167/167 tests passing (100%)**
+- CLI tests: 0/0 (not yet written)
+- **TOTAL: 167/167 library tests passing (100%)**
 
-**Next Steps:**
-1. Integrate with CLI for user-facing commands
-2. Add end-to-end testing with real workflows
-3. Performance benchmarking vs bash implementation
-4. Documentation and migration guide
+**Next Session Priority Tasks:**
+1. Fix semantic bug: Make pull() return bool indicating actual changes
+2. Add CLI commands: workspace switch/sync/foreach/list
+3. Add end-to-end CLI tests
+4. Verify user-facing functionality works
 
 ---
 
@@ -271,9 +278,9 @@
 - **Single-User Optimization**: No need for complex configuration compatibility
 - **Test Migration**: Gradual migration of Python tests to native Rust tests
 
-## 📋 **CURRENT TASKS** (2025-11-02 - Session 16: Phase 6 COMPLETE!)
+## 📋 **CURRENT TASKS** (2025-11-02 - Session 16: Phase 6 Library Complete, CLI Pending)
 
-**Status**: ✅ **PHASE 6 100% COMPLETE** - All 167 tests passing, ready for production!
+**Status**: ⚠️ **PHASE 6 LIBRARY COMPLETE** - 167/167 tests passing, CLI integration needed!
 
 **Completed This Session (Session 16 - Phase 6: sync() Implementation Complete)**:
 - [x] ✅ Designed workspace config persistence strategy (JSON format in .workspace-config.json)
@@ -291,19 +298,26 @@
 - [x] ✅ Removed `#[should_panic]` from 2 sync integration tests
 - [x] ✅ Fixed test_sync_idempotency property test (adjusted expectations)
 - [x] ✅ Fixed test_sync_nonexistent_workspace_errors (calls switch() first)
-- [x] ✅ ALL 167 tests passing (100% success rate)
+- [x] ✅ ALL 167 library tests passing (100% library coverage)
 - [x] ✅ Committed implementation (commit: 384d882)
 
 **Test Status Improvements**:
 - Integration tests: 17/19 → 19/19 passing (+2 sync tests)
 - Property tests: Adjusted expectations for pull() behavior
-- Overall: 168/170 → 167/167 tests (test count corrected, all passing)
+- Overall: 167/167 library tests passing
 
 **Key Implementation Details**:
 1. Config stored as JSON in each workspace directory (.workspace-config.json)
 2. switch() persists config automatically after successful creation
 3. sync() loads config and processes repos based on pinned status
-4. pull() reports success even when already up-to-date (idempotent)
+4. ⚠️ **Semantic issue found**: pull() returns Ok(()) for both "up-to-date" and "changes pulled", causing sync() to report all repos as "updated" even when no changes
+
+**Critical Review Findings**:
+- ✅ Library implementation is solid and well-tested
+- ⚠️ Semantic bug: sync() reporting needs fixing (pull() should return bool)
+- ❌ CLI integration NOT done: workspace binary has no switch/sync/foreach commands
+- ❌ End-to-end CLI testing NOT done
+- **Accurate status**: Phase 6 ~70% complete (library done, CLI pending)
 
 **Code Changes Session 16**:
 - workspace-manager/src/config.rs: +2 lines (Serialize/Deserialize derives)
