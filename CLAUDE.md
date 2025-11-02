@@ -293,78 +293,45 @@ Plan integration of existing Rust AST system into new unified project.
 - **SAFE removal**: `rm -rf "/home/tim/src/git-worktree-superproject/~"` (from project root)
 - **NEVER EVER**: `rm -rf ~/` (would delete entire home directory!)
 
-## 🎯 **NEXT SESSION START**
+## 🎯 **QUICK RESUME FOR NEXT SESSION**
 
-**Quick Resume Command**: "Begin work on your top-priority task"
+**Resume Command**: `"Begin work on your top-priority task"`
 
-**Expected Action**: 🚀 **BEGIN PHASE 3 - Python Test Migration**
+**What Happens Next**:
+You will read and migrate `test/test_per_workspace_config.py` (11 tests) to Rust, adding tests to the appropriate module (likely `workspace-manager/src/git.rs` since they test git config operations).
 
-✅ **Phase 2 FULLY COMPLETE!** All priorities finished:
-- ✅ Phase 1: Core infrastructure (Sessions 1-2)
-- ✅ Phase 2 Priority 0: Tilde expansion fix (Session 3)
-- ✅ Phase 2 Priority 1: Complete worktree operations (Session 2)
-- ✅ Phase 2 Priority 2: Nix flake integration (Session 3)
-- ✅ Phase 2 Priority 3: Configuration management (Session 5)
-- ✅ **Phase 2 Priority 0 (CRITICAL): Worktree config bug fix (Session 6)** **← JUST FIXED!**
+**Current State After Session 7**:
+- ✅ **18 tests passing** (9 original + 9 new config parsing tests)
+- ✅ **Clean build** (cargo check ✅, cargo test ✅)
+- ✅ **Git clean** (all changes committed)
+- ✅ **Phase 2 complete** (all priorities finished)
+- 🔄 **Phase 3 started** (12/728+ tests migrated = 1.6%)
 
-**Session 6 Bug Fix Summary**:
-- Implemented worktree-specific config using ConfigLevel::Worktree
-- Config now correctly written to .git/worktrees/<name>/config.worktree
-- Inheritance chain (worktree → default → legacy) working perfectly
-- All verification tests passed (git CLI, file location, isolation)
+**Phase 3 Test Migration Strategy**:
+1. ✅ **Config Tests - STARTED**:
+   - ✅ test_config.py (8 tests → 12 Rust tests) - Session 7 COMPLETE
+   - 🚀 test_per_workspace_config.py (11 tests) - **NEXT TARGET**
+   - test_config_errors.py (21 tests) - Pending
 
-**After Bug Fix - Phase 3 Strategy (Python Test Migration):**
-1. **Start with Config Tests** (60+ tests, well-structured):
-   - test_config.py (8 tests): Basic config parsing
-   - test_per_workspace_config.py (11 tests): Git config system
-   - test_config_errors.py (21 tests): Error handling
-   - Foundation for other test categories
-
-2. **Then Worktree Operations Tests** (34+ tests):
-   - test_worktree_operations.py (17 tests): Lifecycle tests
-   - test_workspace.py (33 tests): Core workspace ops
+2. **Worktree Operations Tests** (50+ tests):
+   - test_worktree_operations.py (17 tests)
+   - test_workspace.py (33 tests)
    - Already have working implementation to validate against
 
 3. **Integration & Edge Cases** (53+ tests):
    - test_integration_workflows.py (10 tests)
    - test_workspace_advanced.py (17 tests)
    - test_superproject_edge_cases.py (12 tests)
-   - Real-world scenario validation
 
-**Test Migration Approach:**
-- Use tempdir() for all file I/O tests (safety first)
-- Follow existing test patterns from workspace-manager/src/*_tests.rs
-- Port test logic, not bash script invocations
-- Add tests to appropriate module files (config, git, fs)
+**Test Migration Principles**:
+- ✅ Use `tempdir()` for all file I/O tests (safety first)
+- ✅ Follow existing test patterns from workspace-manager/src/*_tests.rs
+- ✅ Port test logic, NOT bash script invocations
+- ✅ Add tests to appropriate module files (config, git, fs)
 
-**Current Focus**: Phase 2 complete, transition to Phase 3
-**Strategic Goal**: Migrate 728+ Python tests to native Rust for unified testing
-**Migration Progress**:
-  - ✅ Core infrastructure (Phase 1) - COMPLETE
-  - ✅ Worktree lifecycle (Phase 2 Priority 1) - COMPLETE
-  - ✅ Nix flake integration (Phase 2 Priority 2) - COMPLETE
-  - ✅ Configuration system (Phase 2 Priority 3) - COMPLETE
-  - 🚀 Test migration (Phase 3) - **READY TO START**
-
-**Architecture Decisions** (Locked):
-- ✅ Git Operations: libgit2-rs (not shell commands)
-- ✅ Configuration: TOML with serde
-- ✅ Error Handling: Custom WorkspaceError types
-- ✅ Testing: Native Rust (migrating from Python)
-- ✅ Nix Integration: Use existing flake-input-modifier library
-
-**Build Verification**:
-```bash
-cargo check  # Should pass (warnings for unused code expected)
-cargo test   # Should pass all 18 tests (9 original + 9 new config tests)
-./target/release/workspace --version  # Should show v0.1.0
-git status   # Should be clean on rust-migration branch
-```
-
-**Session 7 Summary**:
-- ✅ Successfully migrated all 8 Python tests from test_config.py to Rust
-- ✅ Created RepoConfig struct with parsing functions (53 lines production code)
-- ✅ Implemented 12 comprehensive Rust tests (243 lines test code)
-- ✅ All tests pass, clean build, changes committed
-- 📊 Test migration progress: 12/728+ tests (1.6% complete)
-- 🎯 Next target: test_per_workspace_config.py (11 tests)
+**Architecture Decisions (Locked)**:
+- Git Operations: libgit2-rs (not shell commands)
+- Configuration: TOML with serde + workspace.conf parsing
+- Error Handling: Custom WorkspaceError types
+- Testing: Native Rust (migrating from Python)
+- Nix Integration: Use existing flake-input-modifier library
