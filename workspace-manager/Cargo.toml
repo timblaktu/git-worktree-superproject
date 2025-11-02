@@ -3,6 +3,10 @@ name = "workspace-manager"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+name = "workspace_manager"
+path = "src/lib.rs"
+
 [[bin]]
 name = "workspace"
 path = "src/main.rs"
@@ -30,3 +34,6 @@ flake-input-modifier = { path = "../flake-input-modifier" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+mockall = "0.13"
+rstest = "0.23"
+proptest = "1.5"

@@ -3,6 +3,7 @@ mod config;
 mod error;
 mod fs;
 mod git;
+mod workspace;
 
 use anyhow::Result;
 use tracing_subscriber;

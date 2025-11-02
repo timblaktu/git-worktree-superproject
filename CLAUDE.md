@@ -22,20 +22,21 @@
 
 ---
 
-## 🚀 **NEXT SESSION: Phase 4 - Multi-Repo Workspace Test Design**
+## 🚀 **NEXT SESSION: Phase 5 - Multi-Repo Workspace Test Implementation**
 
 **Command to resume:** "Begin work on your top-priority task"
 
 **What you'll do:**
-1. Design trait-based architecture for multi-repo workspace management
-2. Define domain types (Workspace, WorkspaceConfig, RepoInfo, etc.)
-3. Create test infrastructure with rstest fixtures and mockall mocks
-4. Reference PYTEST_CARGO_MIGRATION.md for Rust-idiomatic test patterns
-5. Write test stubs (no implementation) following TDD approach
+1. Implement the 28 test stubs designed in Phase 4 (tests will fail with "not yet implemented")
+2. Use mockall to implement unit tests with mocked dependencies
+3. Use real git operations in tempdir for integration tests
+4. Implement property-based tests with proptest for invariant validation
+5. Verify all tests compile and fail appropriately before Phase 6 implementation
 
 **Phase 1-3 Status:** ✅ **COMPLETE** (Single-repo worktree functionality)
-**Phase 4 Status:** 🚀 **READY TO START** (Multi-repo workspace test design)
-**Current State:** 67 tests passing, cargo check ✅, git clean (commit: 093a583)
+**Phase 4 Status:** ✅ **COMPLETE** (Multi-repo workspace test design - 28 tests)
+**Phase 5 Status:** 🚀 **READY TO START** (Multi-repo workspace test implementation)
+**Current State:** 72 unit tests passing, 28 Phase 4 test stubs created, cargo check ✅
 
 ---
 
@@ -414,10 +415,72 @@
 - 1 commit: feature (093a583) - Phase 3 Session 4 complete
 - **Test Migration Progress**: 17 Python tests → 17 Rust tests created
 
+**Completed This Session (Session 12 - Phase 4: Multi-Repo Test Design COMPLETE)**:
+- [x] ✅ Analyzed remaining Python tests (40 tests in test_workspace.py + test_broken_repos.py)
+- [x] ✅ Designed trait-based architecture with mockall support:
+  - `RepositoryOps` trait for git operation abstraction (#[cfg_attr(test, automock)])
+  - `WorkspaceManager` trait for workspace lifecycle management
+- [x] ✅ Defined domain types with builder pattern (1,127 lines total):
+  - Core types: WorkspaceConfig, WorkspaceInfo, SwitchReport, SyncReport
+  - Builder: WorkspaceConfigBuilder for fluent test setup
+  - Status types: RepoStatus enum, StatusReport, WorkspaceStatus
+  - Result types: ForeachResult, RepoCommandOutput
+- [x] ✅ Created test infrastructure (tests/common/mod.rs, 213 lines):
+  - TestWorkspace fixture with automatic Drop cleanup
+  - TestGitRepos fixture for creating real bare git repositories
+  - Helper functions for test repo management (create_repo, create_repo_with_tag, add_commit)
+- [x] ✅ Wrote 28 test stubs organized by behavior:
+  - **5 unit tests** (src/workspace.rs #[cfg(test)]): Using mockall mocks
+  - **19 integration tests** (tests/multi_repo_workspace.rs): Using real git in tempdir
+  - **4 property-based tests** (tests/workspace_properties.rs): Using proptest
+- [x] ✅ All tests compile successfully (cargo check ✅)
+- [x] ✅ Tests panic appropriately with "Phase 6: not yet implemented" messages
+- [x] ✅ Created lib.rs to expose workspace-manager as library for tests
+- [x] ✅ Updated Cargo.toml with test dependencies (mockall, rstest, proptest)
+
+**Code Changes Session 12**:
+- workspace-manager/src/workspace.rs: +447 lines (traits, types, builders, skeleton impl, 5 unit tests)
+- workspace-manager/src/lib.rs: +11 lines (library interface)
+- workspace-manager/tests/common/mod.rs: +213 lines (test infrastructure)
+- workspace-manager/tests/multi_repo_workspace.rs: +531 lines (19 integration tests)
+- workspace-manager/tests/workspace_properties.rs: +165 lines (4 property tests)
+- workspace-manager/Cargo.toml: +4 lines (dev-dependencies + lib config)
+- Total: +1,371 lines of test infrastructure
+- **Test Count**: 28 new test stubs (5 unit + 19 integration + 4 property)
+
+**Test Design Highlights** (Following PYTEST_CARGO_MIGRATION.md):
+- Reduced 40 Python tests → 28 focused Rust tests via type safety
+- Trait abstractions enable dependency injection and mocking
+- Builder pattern simplifies complex test data setup
+- Drop trait provides automatic cleanup (no explicit teardown)
+- Property-based tests validate invariants across many inputs
+- Tests focus on BEHAVIOR and INVARIANTS, not implementation details
+
+**Phase 4 Test Organization**:
+1. **Unit Tests** (workspace-manager/src/workspace.rs):
+   - test_sync_skips_pinned_repos
+   - test_sync_handles_pull_failures
+   - test_foreach_outside_workspace_errors
+   - test_switch_with_empty_config
+   - test_remove_workspace
+
+2. **Integration Tests** (tests/multi_repo_workspace.rs):
+   - Core Lifecycle (5): create, idempotency, pinned repos, branches, removal
+   - Synchronization (3): pull updates, skip pinned, errors
+   - Bulk Operations (3): foreach execution, env vars, failures
+   - State Inspection (4): status, list, empty state, modifications
+   - Error Handling (4): broken worktrees, uninitialized, detached HEAD, partial failures
+
+3. **Property Tests** (tests/workspace_properties.rs):
+   - test_workspace_consistency_invariant (atomic operations)
+   - test_sync_idempotency (sync twice = sync once)
+   - test_foreach_isolation_invariant (no interference)
+   - test_branch_name_handling (valid branch names)
+
 **Cumulative Test Migration Progress**:
-- Python tests analyzed: 57 (8 + 11 + 21 + 17 from Sessions 7, 8, 9, 10)
-- Rust tests created: 62 (12 + 11 + 22 + 17 from Sessions 7, 8, 9, 10)
-- Percentage of 728+ Python tests: 7.8% (57/728)
+- Python tests analyzed: 57 single-repo + 40 multi-repo = 97 total
+- Rust tests created: 62 single-repo + 28 multi-repo stubs = 90 total
+- Percentage of 728+ Python tests: 13.3% (97/728)
 
 **Previous Sessions Completed**:
 
@@ -485,46 +548,40 @@
 
 **Resume Command**: `"Begin work on your top-priority task"`
 
-**What Happens Next**: **Phase 4 - Multi-Repo Workspace Test Design**
-You will design the Rust-idiomatic test architecture for multi-repo workspace features:
-1. Define trait abstractions (RepositoryOps, WorkspaceManager)
-2. Define domain types with builders (Workspace, WorkspaceConfig, RepoInfo)
-3. Create rstest fixtures with Drop cleanup
-4. Write ~20 test stubs organized by behavior categories
-5. Reference PYTEST_CARGO_MIGRATION.md throughout design process
+**What Happens Next**: **Phase 5 - Multi-Repo Workspace Test Implementation**
 
-**Current State After Session 11** (Phase Redefinition):
-- ✅ **Phases 1-3 COMPLETE** (Single-repo worktree operations fully functional)
-- ✅ **67 tests passing** (comprehensive coverage for implemented features)
-- ✅ **Clean build** (cargo check ✅, cargo test ✅)
-- ✅ **Git clean** (ready for new development phase)
-- 🚀 **Phase 4 READY** (Multi-repo workspace test design - TDD approach)
+Phase 4 test design is COMPLETE. Phase 5 is about implementing the test bodies (not the features yet):
+1. The 28 test stubs currently exist and compile but panic at "not yet implemented"
+2. Phase 5 will implement the test LOGIC (assertions, setup, etc.) - tests will still FAIL
+3. This establishes exactly what behavior we expect before writing any production code
+4. Phase 6 will then implement the features to make the tests pass (classic TDD)
 
-**Test Strategy Redefinition**:
-1. ✅ **Single-Repo Tests - COMPLETE** (Phases 1-3):
-   - ✅ Config parsing (12 tests)
-   - ✅ Git config system (11 tests)
-   - ✅ Config error handling (22 tests)
-   - ✅ Worktree operations (17 tests)
-   - ✅ **Total: 62 tests covering all implemented features**
+**What you'll implement in Phase 5**:
+- Flesh out mockall expectations in unit tests
+- Complete real git operations setup in integration tests
+- Finish property test strategies and invariant checks
+- Ensure all tests compile and fail with meaningful error messages
+- Note: Tests WILL fail because features aren't implemented yet (that's Phase 6)
 
-2. 🚀 **Multi-Repo Tests - DESIGN PHASE** (Phase 4):
-   - Design ~20 focused tests (vs 33 Python tests)
-   - Eliminate type-safety tests (Rust compiler guarantees)
-   - Focus on behavior, invariants, error scenarios
-   - Use trait-based mocking for testability
+**Current State After Session 12** (Phase 4 Complete):
+- ✅ **Phase 4 COMPLETE** (Multi-repo workspace test design)
+- ✅ **28 test stubs created** (5 unit + 19 integration + 4 property)
+- ✅ **Test infrastructure ready** (TestWorkspace, TestGitRepos fixtures)
+- ✅ **All tests compile** (cargo check ✅)
+- ✅ **Trait abstractions defined** (RepositoryOps, WorkspaceManager with #[cfg_attr(test, automock)])
+- ✅ **72 unit tests passing** (Phase 1-3 single-repo tests)
+- 🚀 **Ready for Phase 5** (implement test bodies)
 
-3. ⏳ **Multi-Repo Tests - IMPLEMENTATION** (Phase 5):
-   - Implement designed tests (all will fail initially)
-   - Verify tests fail with appropriate errors
-   - Prepare for TDD implementation in Phase 6
+**Phase Status Summary**:
+1. ✅ **Phase 1-3 COMPLETE** - Single-repo worktree operations (72 tests passing)
+2. ✅ **Phase 4 COMPLETE** - Multi-repo test design (28 test stubs, traits, types, fixtures)
+3. 🚀 **Phase 5 NEXT** - Multi-repo test implementation (make tests fail meaningfully)
+4. ⏳ **Phase 6 PLANNED** - Multi-repo feature implementation (make tests pass via TDD)
 
-**Key Architectural Principles** (from PYTEST_CARGO_MIGRATION.md):
-- ❌ Do NOT lift-and-shift Python/pytest patterns
-- ✅ Design trait abstractions for dependency injection and mocking
-- ✅ Use builders for complex test data setup
-- ✅ Use Drop trait for automatic cleanup (no explicit teardown)
-- ✅ Test behaviors and invariants, not implementation details
-- ✅ Use proptest for property-based invariant validation
+**Key Files for Phase 5**:
+- workspace-manager/src/workspace.rs (traits + 5 unit test stubs)
+- workspace-manager/tests/multi_repo_workspace.rs (19 integration test stubs)
+- workspace-manager/tests/workspace_properties.rs (4 property test stubs)
+- workspace-manager/tests/common/mod.rs (test infrastructure - already complete)
 
-**Reference Document**: `PYTEST_CARGO_MIGRATION.md` (comprehensive pytest→Rust migration guide)
+**Critical Insight**: The test stubs currently panic at the FIRST unimplemented call (usually `switch()`), not necessarily the method they're testing. This is expected and correct - Phase 5 will establish the full test logic, Phase 6 will implement the features.
