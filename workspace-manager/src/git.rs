@@ -1,5 +1,5 @@
 use crate::error::{Result, WorkspaceError};
-use git2::{BranchType, Repository, Worktree};
+use git2::{BranchType, Repository, Worktree, WorktreeLockStatus};
 use std::path::{Path, PathBuf};
 use tracing::{debug, info};
 
@@ -140,7 +140,11 @@ impl GitOps {
         let worktree = self.repo.find_worktree(name)?;
 
         let path = worktree.path().to_path_buf();
-        let is_locked = worktree.is_locked().is_ok();
+        // is_locked() returns Ok(status) which is either Locked or Unlocked
+        let is_locked = worktree
+            .is_locked()
+            .map(|status| matches!(status, WorktreeLockStatus::Locked { .. }))
+            .unwrap_or(false);
         let is_valid = worktree.validate().is_ok();
 
         Ok(WorktreeInfo {
@@ -184,6 +188,41 @@ impl GitOps {
     /// Get repository status summary
     pub fn status_summary(&self) -> Result<StatusSummary> {
         let statuses = self.repo.statuses(None)?;
+
+        let mut modified = 0;
+        let mut added = 0;
+        let mut deleted = 0;
+        let mut untracked = 0;
+
+        for entry in statuses.iter() {
+            let status = entry.status();
+            if status.is_wt_modified() || status.is_index_modified() {
+                modified += 1;
+            }
+            if status.is_wt_new() {
+                untracked += 1;
+            }
+            if status.is_index_new() {
+                added += 1;
+            }
+            if status.is_wt_deleted() || status.is_index_deleted() {
+                deleted += 1;
+            }
+        }
+
+        Ok(StatusSummary {
+            modified,
+            added,
+            deleted,
+            untracked,
+        })
+    }
+
+    /// Get status summary for a specific worktree
+    pub fn worktree_status(&self, worktree_path: &Path) -> Result<StatusSummary> {
+        // Open the worktree repository
+        let worktree_repo = Repository::open(worktree_path)?;
+        let statuses = worktree_repo.statuses(None)?;
 
         let mut modified = 0;
         let mut added = 0;

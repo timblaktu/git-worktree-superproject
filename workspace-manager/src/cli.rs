@@ -198,12 +198,61 @@ fn cmd_list(config: Config, detailed: bool) -> Result<()> {
     for name in worktrees {
         if detailed {
             if let Ok(info) = git.worktree_info(&name) {
+                // Get branch and status information for the worktree
+                let branch = if info.path.exists() {
+                    match GitOps::open(&info.path) {
+                        Ok(wt_git) => match wt_git.current_branch() {
+                            Ok(b) => format!("on branch {}", b),
+                            Err(_) => "detached HEAD".to_string(),
+                        },
+                        Err(_) => "unknown branch".to_string(),
+                    }
+                } else {
+                    "directory missing".to_string()
+                };
+
+                let status = if info.path.exists() {
+                    match git.worktree_status(&info.path) {
+                        Ok(s) => {
+                            if s.is_clean() {
+                                "clean".to_string()
+                            } else {
+                                format!(
+                                    "M:{} A:{} D:{} U:{}",
+                                    s.modified, s.added, s.deleted, s.untracked
+                                )
+                            }
+                        }
+                        Err(_) => "unknown".to_string(),
+                    }
+                } else {
+                    "n/a".to_string()
+                };
+
                 println!("  {} ({})", name, info.path.display());
+                println!("    Branch: {}", branch);
+                println!("    Status: {}", status);
                 println!("    Locked: {}", info.is_locked);
                 println!("    Valid: {}", info.is_valid);
             }
         } else {
-            println!("  {}", name);
+            // Simple list - show name and basic info
+            if let Ok(info) = git.worktree_info(&name) {
+                let branch_marker = if info.path.exists() {
+                    match GitOps::open(&info.path) {
+                        Ok(wt_git) => match wt_git.current_branch() {
+                            Ok(b) => format!(" [{}]", b),
+                            Err(_) => String::new(),
+                        },
+                        Err(_) => String::new(),
+                    }
+                } else {
+                    " [missing]".to_string()
+                };
+                println!("  {}{}", name, branch_marker);
+            } else {
+                println!("  {}", name);
+            }
         }
     }
 
@@ -218,6 +267,14 @@ fn cmd_add(
 ) -> Result<()> {
     let git = GitOps::discover(&config.main_repo)?;
 
+    // Check if worktree with this name already exists
+    if git.has_worktree(&name) {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Worktree '{}' already exists",
+            name
+        )));
+    }
+
     // Determine worktree path
     let worktree_path = if let Some(p) = path {
         p
@@ -225,28 +282,136 @@ fn cmd_add(
         config.worktree_base.join(&name)
     };
 
+    // Check if path already exists
+    if worktree_path.exists() {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Path already exists: {}",
+            worktree_path.display()
+        )));
+    }
+
     // Create parent directory if needed
     if let Some(parent) = worktree_path.parent() {
         std::fs::create_dir_all(parent)?;
+        info!("Created parent directory: {}", parent.display());
+    }
+
+    // Determine branch to use
+    let branch_to_use = branch.as_deref();
+
+    // If branch is specified, check if it already exists
+    if let Some(branch_name) = branch_to_use {
+        let branches = git.list_branches(None)?;
+        if branches.contains(&branch_name.to_string()) {
+            info!("Branch '{}' already exists, will check it out", branch_name);
+        } else {
+            info!("Branch '{}' will be created", branch_name);
+        }
     }
 
     // Add the worktree
-    git.add_worktree(&name, &worktree_path, branch.as_deref())?;
+    debug!(
+        "Creating worktree '{}' at {}",
+        name,
+        worktree_path.display()
+    );
+    git.add_worktree(&name, &worktree_path, branch_to_use)?;
 
-    println!("Added worktree '{}' at: {}", name, worktree_path.display());
-    if let Some(branch_name) = branch {
-        println!("Branch: {}", branch_name);
+    // Verify the worktree was created successfully
+    let info = git.worktree_info(&name)?;
+    if !info.is_valid {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Worktree '{}' was created but is not valid",
+            name
+        )));
     }
+
+    // Verify directory exists
+    if !worktree_path.exists() {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Worktree directory was not created: {}",
+            worktree_path.display()
+        )));
+    }
+
+    println!(
+        "✓ Added worktree '{}' at: {}",
+        name,
+        worktree_path.display()
+    );
+    if let Some(branch_name) = branch {
+        println!("  Branch: {}", branch_name);
+    }
+    println!("  Status: Valid");
 
     Ok(())
 }
 
-fn cmd_remove(config: Config, name: String, _force: bool) -> Result<()> {
+fn cmd_remove(config: Config, name: String, force: bool) -> Result<()> {
     let git = GitOps::discover(&config.main_repo)?;
 
+    // Check if worktree exists
+    if !git.has_worktree(&name) {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Worktree '{}' does not exist",
+            name
+        )));
+    }
+
+    // Get worktree information
+    let info = git.worktree_info(&name)?;
+    let worktree_path = info.path.clone();
+
+    // Check if worktree is locked
+    if info.is_locked {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Worktree '{}' is locked. Unlock it before removing",
+            name
+        )));
+    }
+
+    // Check for uncommitted changes unless --force is specified
+    if !force && worktree_path.exists() {
+        match git.worktree_status(&worktree_path) {
+            Ok(status) => {
+                if !status.is_clean() {
+                    return Err(WorkspaceError::WorktreeError(format!(
+                        "Worktree '{}' has uncommitted changes:\n\
+                         Modified: {}, Added: {}, Deleted: {}, Untracked: {}\n\
+                         Use --force to remove anyway",
+                        name, status.modified, status.added, status.deleted, status.untracked
+                    )));
+                }
+            }
+            Err(e) => {
+                debug!("Could not check worktree status: {}", e);
+                // If we can't check status, warn but don't block unless not forcing
+                if !force {
+                    return Err(WorkspaceError::WorktreeError(format!(
+                        "Could not verify worktree status: {}. Use --force to remove anyway",
+                        e
+                    )));
+                }
+            }
+        }
+    }
+
+    // Remove the worktree from git
+    info!("Removing worktree '{}' from git", name);
     git.remove_worktree(&name)?;
 
-    println!("Removed worktree: {}", name);
+    // Remove the directory from filesystem if it exists
+    if worktree_path.exists() {
+        info!("Removing directory: {}", worktree_path.display());
+        std::fs::remove_dir_all(&worktree_path)?;
+        println!(
+            "✓ Removed worktree '{}' and directory: {}",
+            name,
+            worktree_path.display()
+        );
+    } else {
+        println!("✓ Removed worktree '{}' (directory already removed)", name);
+    }
 
     Ok(())
 }
