@@ -58,10 +58,40 @@
 - CLI end-to-end tests: 0/0 (not yet written)
 
 **Next Session Priority Tasks:**
-1. Add CLI commands: workspace switch/sync/foreach
-2. Add end-to-end CLI tests
-3. Verify user-facing functionality works
-4. Write user documentation
+
+**IMMEDIATE (Session 18): CLI Integration for Multi-Repo Workspace**
+
+1. **Add CLI Commands** (workspace-manager/src/cli.rs):
+   - Add `Switch` variant to Commands enum with fields: workspace_name, repos (from workspace.conf or args)
+   - Add `Sync` variant to Commands enum with field: workspace_name
+   - Add `Foreach` variant to Commands enum with fields: workspace_name, command (Vec<String>)
+   - Add match arms in execute_command() to call new cmd_* functions
+
+2. **Implement Command Functions** (workspace-manager/src/cli.rs):
+   - `cmd_switch()`: Create WorkspaceManager, build WorkspaceConfig from args/config, call switch(), display SwitchReport
+   - `cmd_sync()`: Create WorkspaceManager, call sync(), display SyncReport
+   - `cmd_foreach()`: Create WorkspaceManager, call foreach(), display ForeachResult
+
+3. **Handle Configuration Loading**:
+   - Decide how to specify repos for switch command (workspace.conf file? CLI args? both?)
+   - Parse RepoConfig from workspace.conf using existing parse_workspace_conf()
+   - Build WorkspaceConfig with worktree_base from config.toml
+
+4. **Manual End-to-End Testing**:
+   - cargo build
+   - ./target/debug/workspace switch main (create multi-repo workspace)
+   - ./target/debug/workspace sync main (pull updates)
+   - ./target/debug/workspace foreach main "git status" (run command across repos)
+
+5. **Add CLI Tests** (if time permits):
+   - Integration tests that shell out to binary
+   - Verify JSON output parsing if implementing --json flag
+
+**Success Criteria**:
+- User can run `workspace switch <name>` to create multi-repo workspace
+- User can run `workspace sync <name>` to update all repos
+- User can run `workspace foreach <name> <command>` to execute commands
+- All operations use the tested library layer (thin CLI wrapper)
 
 ---
 
