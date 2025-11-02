@@ -1071,3 +1071,260 @@ fn test_config_multiple_repositories_in_workspace() {
     cmd_show.assert().success();
     // Note: Config show will display at least one of the repos due to the inheritance chain
 }
+
+// ============================================================================
+// Flake Input Config Command Tests
+// ============================================================================
+
+#[test]
+fn test_config_set_flake_input_workspace_specific() {
+    let fixture = CliTestFixture::new();
+
+    // Create a git worktree using 'workspace add'
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "flake-workspace", "--branch", "flake-branch"])
+        .current_dir(fixture.path());
+    cmd_add.assert().success();
+
+    // Set flake input override for workspace
+    let mut cmd_set = fixture.workspace_cmd();
+    cmd_set
+        .args([
+            "config",
+            "set-flake-input",
+            "flake-workspace",
+            "nixpkgs",
+            "github:NixOS/nixpkgs/nixos-unstable",
+        ])
+        .current_dir(fixture.path());
+
+    cmd_set
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Set flake input for workspace"))
+        .stdout(predicate::str::contains("nixpkgs"))
+        .stdout(predicate::str::contains(
+            "github:NixOS/nixpkgs/nixos-unstable",
+        ));
+
+    // Verify by showing flake inputs
+    let mut cmd_show = fixture.workspace_cmd();
+    cmd_show
+        .args(["config", "show-flake-inputs", "flake-workspace"])
+        .current_dir(fixture.path());
+
+    cmd_show
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nixpkgs"))
+        .stdout(predicate::str::contains(
+            "github:NixOS/nixpkgs/nixos-unstable",
+        ));
+}
+
+#[test]
+fn test_config_set_flake_input_with_ref() {
+    let fixture = CliTestFixture::new();
+
+    // Create a git worktree
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "flake-workspace", "--branch", "flake-branch"])
+        .current_dir(fixture.path());
+    cmd_add.assert().success();
+
+    // Set flake input with git ref
+    let mut cmd_set = fixture.workspace_cmd();
+    cmd_set
+        .args([
+            "config",
+            "set-flake-input",
+            "flake-workspace",
+            "nixpkgs",
+            "github:NixOS/nixpkgs",
+            "--git-ref",
+            "nixos-23.11",
+        ])
+        .current_dir(fixture.path());
+
+    cmd_set
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nixpkgs"))
+        .stdout(predicate::str::contains("github:NixOS/nixpkgs/nixos-23.11"));
+}
+
+#[test]
+fn test_config_set_flake_input_default() {
+    let fixture = CliTestFixture::new();
+
+    // Set default flake input (no workspace creation needed)
+    let mut cmd_set_default = fixture.workspace_cmd();
+    cmd_set_default
+        .args([
+            "config",
+            "set-flake-input-default",
+            "home-manager",
+            "github:nix-community/home-manager",
+        ])
+        .current_dir(fixture.path());
+
+    cmd_set_default
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Set default flake input"))
+        .stdout(predicate::str::contains("home-manager"))
+        .stdout(predicate::str::contains(
+            "github:nix-community/home-manager",
+        ));
+}
+
+#[test]
+fn test_config_set_flake_input_default_with_ref() {
+    let fixture = CliTestFixture::new();
+
+    // Set default flake input with git ref
+    let mut cmd_set_default = fixture.workspace_cmd();
+    cmd_set_default
+        .args([
+            "config",
+            "set-flake-input-default",
+            "nixpkgs",
+            "github:NixOS/nixpkgs",
+            "--git-ref",
+            "nixos-23.11",
+        ])
+        .current_dir(fixture.path());
+
+    cmd_set_default
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nixpkgs"))
+        .stdout(predicate::str::contains("github:NixOS/nixpkgs/nixos-23.11"));
+}
+
+#[test]
+fn test_config_show_flake_inputs_empty() {
+    let fixture = CliTestFixture::new();
+
+    // Create a workspace
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "empty-workspace", "--branch", "empty-branch"])
+        .current_dir(fixture.path());
+    cmd_add.assert().success();
+
+    // Show flake inputs (should be empty)
+    let mut cmd_show = fixture.workspace_cmd();
+    cmd_show
+        .args(["config", "show-flake-inputs", "empty-workspace"])
+        .current_dir(fixture.path());
+
+    cmd_show
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Flake inputs for workspace"));
+}
+
+#[test]
+fn test_config_flake_input_inheritance_workspace_overrides_default() {
+    let fixture = CliTestFixture::new();
+
+    // Create workspace
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "override-workspace", "--branch", "override-branch"])
+        .current_dir(fixture.path());
+    cmd_add.assert().success();
+
+    // Set default flake input
+    let mut cmd_set_default = fixture.workspace_cmd();
+    cmd_set_default
+        .args([
+            "config",
+            "set-flake-input-default",
+            "nixpkgs",
+            "github:NixOS/nixpkgs/nixos-23.11",
+        ])
+        .current_dir(fixture.path());
+    cmd_set_default.assert().success();
+
+    // Set workspace-specific override
+    let mut cmd_set = fixture.workspace_cmd();
+    cmd_set
+        .args([
+            "config",
+            "set-flake-input",
+            "override-workspace",
+            "nixpkgs",
+            "github:NixOS/nixpkgs/nixos-unstable",
+        ])
+        .current_dir(fixture.path());
+    cmd_set.assert().success();
+
+    // Show flake inputs - should see workspace-specific, not default
+    let mut cmd_show = fixture.workspace_cmd();
+    cmd_show
+        .args(["config", "show-flake-inputs", "override-workspace"])
+        .current_dir(fixture.path());
+
+    cmd_show
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nixos-unstable"))
+        .stdout(predicate::str::contains("Workspace-specific"));
+}
+
+#[test]
+fn test_config_multiple_flake_inputs() {
+    let fixture = CliTestFixture::new();
+
+    // Create workspace
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "multi-input-workspace", "--branch", "multi-branch"])
+        .current_dir(fixture.path());
+    cmd_add.assert().success();
+
+    // Set multiple flake inputs
+    let inputs = vec![
+        ("nixpkgs", "github:NixOS/nixpkgs/nixos-unstable"),
+        ("home-manager", "github:nix-community/home-manager"),
+        ("flake-utils", "github:numtide/flake-utils"),
+    ];
+
+    for (name, url) in &inputs {
+        let mut cmd_set = fixture.workspace_cmd();
+        cmd_set
+            .args([
+                "config",
+                "set-flake-input",
+                "multi-input-workspace",
+                name,
+                url,
+            ])
+            .current_dir(fixture.path());
+        cmd_set.assert().success();
+    }
+
+    // Show flake inputs - should see all three
+    let mut cmd_show = fixture.workspace_cmd();
+    cmd_show
+        .args(["config", "show-flake-inputs", "multi-input-workspace"])
+        .current_dir(fixture.path());
+
+    cmd_show
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nixpkgs"))
+        .stdout(predicate::str::contains("home-manager"))
+        .stdout(predicate::str::contains("flake-utils"))
+        .stdout(predicate::str::contains(
+            "github:NixOS/nixpkgs/nixos-unstable",
+        ))
+        .stdout(predicate::str::contains(
+            "github:nix-community/home-manager",
+        ))
+        .stdout(predicate::str::contains("github:numtide/flake-utils"));
+}

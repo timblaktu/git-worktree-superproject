@@ -188,6 +188,42 @@ pub enum ConfigCommands {
         #[arg(default_value = "workspace.conf")]
         source_file: PathBuf,
     },
+
+    /// Set flake input override for a workspace
+    SetFlakeInput {
+        /// Workspace name
+        workspace: String,
+
+        /// Input name (e.g., "nixpkgs")
+        input_name: String,
+
+        /// URL for the input
+        url: String,
+
+        /// Optional ref/branch (appended to URL)
+        #[arg(short, long)]
+        git_ref: Option<String>,
+    },
+
+    /// Set default flake input for all workspaces
+    SetFlakeInputDefault {
+        /// Input name (e.g., "nixpkgs")
+        input_name: String,
+
+        /// URL for the input
+        url: String,
+
+        /// Optional ref/branch (appended to URL)
+        #[arg(short, long)]
+        git_ref: Option<String>,
+    },
+
+    /// Show flake inputs for a workspace
+    ShowFlakeInputs {
+        /// Workspace name (defaults to "main")
+        #[arg(default_value = "main")]
+        workspace: String,
+    },
 }
 
 /// Parse command-line arguments
@@ -263,6 +299,24 @@ pub fn execute_command(args: Args) -> Result<()> {
                 source_file,
             } => {
                 cmd_config_import(config, workspace, source_file)?;
+            }
+            ConfigCommands::SetFlakeInput {
+                workspace,
+                input_name,
+                url,
+                git_ref,
+            } => {
+                cmd_config_set_flake_input(config, workspace, input_name, url, git_ref)?;
+            }
+            ConfigCommands::SetFlakeInputDefault {
+                input_name,
+                url,
+                git_ref,
+            } => {
+                cmd_config_set_flake_input_default(config, input_name, url, git_ref)?;
+            }
+            ConfigCommands::ShowFlakeInputs { workspace } => {
+                cmd_config_show_flake_inputs(config, workspace)?;
             }
         },
         Commands::Switch { name, config_file } => {
@@ -850,6 +904,154 @@ fn cmd_config_import(config: Config, workspace: String, source_file: PathBuf) ->
 
     println!();
     println!("Import complete: {} repositories imported", imported_count);
+
+    Ok(())
+}
+
+fn cmd_config_set_flake_input(
+    config: Config,
+    workspace: String,
+    input_name: String,
+    url: String,
+    git_ref: Option<String>,
+) -> Result<()> {
+    let git = GitOps::discover(&config.main_repo)?;
+
+    // Enable worktree config if not already enabled
+    if !git.is_worktree_config_enabled() {
+        git.enable_worktree_config()?;
+    }
+
+    let worktree_path = config.worktree_base.join(&workspace);
+
+    // Check if workspace exists, if not create it
+    if !worktree_path.exists() || !git.has_worktree(&workspace) {
+        info!("Workspace '{}' does not exist, creating it", workspace);
+
+        // Create parent directory if needed
+        if let Some(parent) = worktree_path.parent() {
+            std::fs::create_dir_all(parent)?;
+            info!("Created parent directory: {}", parent.display());
+        }
+
+        git.add_worktree(
+            &workspace,
+            &worktree_path,
+            Some(&format!("workspace/{}", workspace)),
+        )?;
+    }
+
+    // Build final URL with ref if provided
+    let final_url = if let Some(ref_val) = &git_ref {
+        // Handle different URL formats for appending refs
+        if url.starts_with("github:") {
+            format!("{}/{}", url, ref_val)
+        } else if url.contains('?') {
+            format!("{}&ref={}", url, ref_val)
+        } else {
+            format!("{}?ref={}", url, ref_val)
+        }
+    } else {
+        url.clone()
+    };
+
+    // Open worktree and set flake input override
+    let worktree_git = GitOps::open(&worktree_path)?;
+    worktree_git.set_flake_input(&input_name, &final_url)?;
+
+    println!("Set flake input for workspace '{}':", workspace);
+    println!("  {}: {}", input_name, final_url);
+
+    Ok(())
+}
+
+fn cmd_config_set_flake_input_default(
+    config: Config,
+    input_name: String,
+    url: String,
+    git_ref: Option<String>,
+) -> Result<()> {
+    let git = GitOps::discover(&config.main_repo)?;
+
+    // Enable worktree config if not already enabled
+    if !git.is_worktree_config_enabled() {
+        git.enable_worktree_config()?;
+    }
+
+    // Build final URL with ref if provided
+    let final_url = if let Some(ref_val) = &git_ref {
+        // Handle different URL formats for appending refs
+        if url.starts_with("github:") {
+            format!("{}/{}", url, ref_val)
+        } else if url.contains('?') {
+            format!("{}&ref={}", url, ref_val)
+        } else {
+            format!("{}?ref={}", url, ref_val)
+        }
+    } else {
+        url.clone()
+    };
+
+    // Set default flake input in superproject config
+    git.set_flake_input_default(&input_name, &final_url)?;
+
+    println!("Set default flake input:");
+    println!("  {}: {}", input_name, final_url);
+
+    Ok(())
+}
+
+fn cmd_config_show_flake_inputs(config: Config, workspace: String) -> Result<()> {
+    let git = GitOps::discover(&config.main_repo)?;
+    let worktree_path = config.worktree_base.join(&workspace);
+
+    println!("Flake inputs for workspace: {}", workspace);
+    println!("=========================================");
+    println!();
+
+    // Check if workspace exists
+    let workspace_exists = worktree_path.exists() && git.has_worktree(&workspace);
+
+    // Priority 1: Workspace-specific overrides
+    if workspace_exists {
+        let worktree_git = GitOps::open(&worktree_path)?;
+        let workspace_inputs = worktree_git.get_all_flake_inputs_worktree()?;
+
+        if !workspace_inputs.is_empty() {
+            println!("Workspace-specific input overrides:");
+            for (name, url) in workspace_inputs {
+                println!("  {}: {}", name, url);
+            }
+            println!();
+        }
+    }
+
+    // Priority 2: Default overrides
+    let default_inputs = git.get_all_flake_inputs_default()?;
+    let has_default_inputs = !default_inputs.is_empty();
+    if has_default_inputs {
+        println!("Default input overrides (inherited):");
+        for (name, url) in default_inputs {
+            println!("  {}: {}", name, url);
+        }
+        println!();
+    }
+
+    // Note about original flake.nix inputs
+    let flake_path = std::env::current_dir()?.join("flake.nix");
+    if flake_path.exists() {
+        println!("Original flake.nix inputs:");
+        println!("  (These are used unless overridden above)");
+        println!("  Run 'nix flake metadata' to see original inputs");
+        println!();
+    } else {
+        if !workspace_exists {
+            println!("Note: Workspace '{}' does not exist", workspace);
+        }
+        if !has_default_inputs {
+            println!("No flake input overrides configured");
+        }
+    }
 
     Ok(())
 }

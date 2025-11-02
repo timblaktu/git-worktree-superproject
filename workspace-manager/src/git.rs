@@ -384,6 +384,113 @@ impl GitOps {
         debug!("Removed all worktree config values for: {}", key);
         Ok(())
     }
+
+    /// Set flake input URL for a worktree (workspace-specific override)
+    pub fn set_flake_input(&self, input_name: &str, url: &str) -> Result<()> {
+        let key = format!("workspace.flake.input.{}.url", input_name);
+        self.worktree_config_set(&key, url)?;
+        info!("Set flake input override: {} = {}", input_name, url);
+        Ok(())
+    }
+
+    /// Set default flake input URL (superproject-level)
+    pub fn set_flake_input_default(&self, input_name: &str, url: &str) -> Result<()> {
+        let key = format!("workspace.flake.input.{}.url", input_name);
+        self.config_set(&key, url)?;
+        info!("Set default flake input: {} = {}", input_name, url);
+        Ok(())
+    }
+
+    /// Get flake input URL with 3-tier inheritance:
+    /// 1. Workspace-specific (worktree config)
+    /// 2. Default (superproject config)
+    /// 3. None (caller should use flake.nix)
+    pub fn get_flake_input(&self, input_name: &str) -> Result<Option<String>> {
+        let key = format!("workspace.flake.input.{}.url", input_name);
+
+        // Priority 1: Workspace-specific override
+        if self.is_worktree_config_enabled() {
+            let config = self.repo.config()?;
+            if let Ok(worktree_config) = config.open_level(ConfigLevel::Worktree) {
+                if let Ok(value) = worktree_config.get_string(&key) {
+                    return Ok(Some(value));
+                }
+            }
+        }
+
+        // Priority 2: Default override
+        let config = self.repo.config()?;
+        if let Ok(value) = config.get_string(&key) {
+            return Ok(Some(value));
+        }
+
+        // Priority 3: None (use flake.nix)
+        Ok(None)
+    }
+
+    /// Get all flake inputs from worktree config (workspace-specific)
+    pub fn get_all_flake_inputs_worktree(&self) -> Result<Vec<(String, String)>> {
+        if !self.is_worktree_config_enabled() {
+            return Ok(Vec::new());
+        }
+
+        let config = self.repo.config()?;
+        let worktree_config = config.open_level(ConfigLevel::Worktree)?;
+        let mut inputs = Vec::new();
+
+        // Get all entries matching workspace.flake.input.*.url
+        if let Ok(mut entries) =
+            worktree_config.entries(Some("workspace\\.flake\\.input\\..*\\.url"))
+        {
+            while let Some(entry) = entries.next() {
+                if let Ok(entry) = entry {
+                    if let (Some(name), Some(value)) = (entry.name(), entry.value()) {
+                        // Extract input name from "workspace.flake.input.{name}.url"
+                        if let Some(input_name) = name
+                            .strip_prefix("workspace.flake.input.")
+                            .and_then(|s| s.strip_suffix(".url"))
+                        {
+                            inputs.push((input_name.to_string(), value.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(inputs)
+    }
+
+    /// Get all flake inputs from superproject config (defaults)
+    pub fn get_all_flake_inputs_default(&self) -> Result<Vec<(String, String)>> {
+        let config = self.repo.config()?;
+        let mut inputs = Vec::new();
+
+        // Get all entries matching workspace.flake.input.*.url
+        if let Ok(mut entries) = config.entries(Some("workspace\\.flake\\.input\\..*\\.url")) {
+            while let Some(entry) = entries.next() {
+                if let Ok(entry) = entry {
+                    if let (Some(name), Some(value)) = (entry.name(), entry.value()) {
+                        // Extract input name from "workspace.flake.input.{name}.url"
+                        if let Some(input_name) = name
+                            .strip_prefix("workspace.flake.input.")
+                            .and_then(|s| s.strip_suffix(".url"))
+                        {
+                            // Only add if not in worktree-specific config
+                            if self.is_worktree_config_enabled() {
+                                let worktree_config = config.open_level(ConfigLevel::Worktree)?;
+                                if worktree_config.get_string(name).is_ok() {
+                                    continue; // Skip, already in worktree config
+                                }
+                            }
+                            inputs.push((input_name.to_string(), value.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(inputs)
+    }
 }
 
 /// Information about a worktree
@@ -776,6 +883,226 @@ mod tests {
         let final_worktrees = git_ops.list_worktrees().unwrap();
         assert_eq!(final_worktrees.len(), initial_worktrees.len());
         assert!(!final_worktrees.contains(&"test".to_string()));
+    }
+
+    // ==================== TestFlakeInputConfig Tests ====================
+
+    #[test]
+    fn test_set_flake_input_worktree() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Enable worktree config extension in main repo first
+        git_ops.enable_worktree_config().unwrap();
+
+        // Create worktrees parent directory
+        let worktrees_dir = _tempdir.path().join("worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree_path = worktrees_dir.join("dev");
+        git_ops
+            .add_worktree("dev", &worktree_path, Some("workspace/dev"))
+            .unwrap();
+
+        // Open the worktree repository
+        let worktree_ops = GitOps::open(&worktree_path).unwrap();
+
+        // Set flake input override
+        worktree_ops
+            .set_flake_input("nixpkgs", "github:NixOS/nixpkgs/nixos-unstable")
+            .unwrap();
+
+        // Verify it was set
+        let config = worktree_ops.repo.config().unwrap();
+        let worktree_config = config.open_level(ConfigLevel::Worktree).unwrap();
+        let value = worktree_config
+            .get_string("workspace.flake.input.nixpkgs.url")
+            .unwrap();
+        assert_eq!(value, "github:NixOS/nixpkgs/nixos-unstable");
+    }
+
+    #[test]
+    fn test_set_flake_input_default() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Set default flake input
+        git_ops
+            .set_flake_input_default("home-manager", "github:nix-community/home-manager")
+            .unwrap();
+
+        // Verify it was set in superproject config
+        let config = git_ops.repo.config().unwrap();
+        let value = config
+            .get_string("workspace.flake.input.home-manager.url")
+            .unwrap();
+        assert_eq!(value, "github:nix-community/home-manager");
+    }
+
+    #[test]
+    fn test_get_flake_input_three_tier_inheritance() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Enable worktree config extension
+        git_ops.enable_worktree_config().unwrap();
+
+        // Set default flake input
+        git_ops
+            .set_flake_input_default("nixpkgs", "github:NixOS/nixpkgs/nixos-23.11")
+            .unwrap();
+
+        // Create worktree
+        let worktrees_dir = _tempdir.path().join("worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+        let worktree_path = worktrees_dir.join("dev");
+        git_ops
+            .add_worktree("dev", &worktree_path, Some("workspace/dev"))
+            .unwrap();
+
+        // Open worktree
+        let worktree_ops = GitOps::open(&worktree_path).unwrap();
+
+        // Priority 2: Should get default value
+        let value = worktree_ops.get_flake_input("nixpkgs").unwrap();
+        assert_eq!(value, Some("github:NixOS/nixpkgs/nixos-23.11".to_string()));
+
+        // Priority 1: Set workspace-specific override
+        worktree_ops
+            .set_flake_input("nixpkgs", "github:NixOS/nixpkgs/nixos-unstable")
+            .unwrap();
+
+        // Now should get workspace-specific value
+        let value = worktree_ops.get_flake_input("nixpkgs").unwrap();
+        assert_eq!(
+            value,
+            Some("github:NixOS/nixpkgs/nixos-unstable".to_string())
+        );
+
+        // Non-existent input should return None
+        let value = worktree_ops.get_flake_input("nonexistent").unwrap();
+        assert_eq!(value, None);
+    }
+
+    #[test]
+    fn test_get_all_flake_inputs_worktree() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Enable worktree config extension
+        git_ops.enable_worktree_config().unwrap();
+
+        // Create worktree
+        let worktrees_dir = _tempdir.path().join("worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+        let worktree_path = worktrees_dir.join("dev");
+        git_ops
+            .add_worktree("dev", &worktree_path, Some("workspace/dev"))
+            .unwrap();
+
+        // Open worktree
+        let worktree_ops = GitOps::open(&worktree_path).unwrap();
+
+        // Set multiple flake inputs
+        worktree_ops
+            .set_flake_input("nixpkgs", "github:NixOS/nixpkgs/nixos-unstable")
+            .unwrap();
+        worktree_ops
+            .set_flake_input("home-manager", "github:nix-community/home-manager")
+            .unwrap();
+
+        // Get all worktree-specific inputs
+        let inputs = worktree_ops.get_all_flake_inputs_worktree().unwrap();
+        assert_eq!(inputs.len(), 2);
+
+        // Check that both inputs are present
+        let nixpkgs = inputs.iter().find(|(name, _)| name == "nixpkgs");
+        assert!(nixpkgs.is_some());
+        assert_eq!(nixpkgs.unwrap().1, "github:NixOS/nixpkgs/nixos-unstable");
+
+        let home_manager = inputs.iter().find(|(name, _)| name == "home-manager");
+        assert!(home_manager.is_some());
+        assert_eq!(home_manager.unwrap().1, "github:nix-community/home-manager");
+    }
+
+    #[test]
+    fn test_get_all_flake_inputs_default() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Set multiple default flake inputs
+        git_ops
+            .set_flake_input_default("nixpkgs", "github:NixOS/nixpkgs/nixos-23.11")
+            .unwrap();
+        git_ops
+            .set_flake_input_default(
+                "home-manager",
+                "github:nix-community/home-manager/release-23.11",
+            )
+            .unwrap();
+
+        // Get all default inputs
+        let inputs = git_ops.get_all_flake_inputs_default().unwrap();
+        assert_eq!(inputs.len(), 2);
+
+        // Check that both inputs are present
+        let nixpkgs = inputs.iter().find(|(name, _)| name == "nixpkgs");
+        assert!(nixpkgs.is_some());
+        assert_eq!(nixpkgs.unwrap().1, "github:NixOS/nixpkgs/nixos-23.11");
+
+        let home_manager = inputs.iter().find(|(name, _)| name == "home-manager");
+        assert!(home_manager.is_some());
+        assert_eq!(
+            home_manager.unwrap().1,
+            "github:nix-community/home-manager/release-23.11"
+        );
+    }
+
+    #[test]
+    fn test_flake_input_workspace_isolation() {
+        let (_tempdir, _repo) = create_test_repo();
+        let git_ops = GitOps::discover(_tempdir.path()).unwrap();
+
+        // Enable worktree config extension
+        git_ops.enable_worktree_config().unwrap();
+
+        // Create two worktrees
+        let worktrees_dir = _tempdir.path().join("worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree1_path = worktrees_dir.join("workspace1");
+        let worktree2_path = worktrees_dir.join("workspace2");
+
+        git_ops
+            .add_worktree("workspace1", &worktree1_path, Some("workspace/workspace1"))
+            .unwrap();
+        git_ops
+            .add_worktree("workspace2", &worktree2_path, Some("workspace/workspace2"))
+            .unwrap();
+
+        // Open both worktrees
+        let worktree1_ops = GitOps::open(&worktree1_path).unwrap();
+        let worktree2_ops = GitOps::open(&worktree2_path).unwrap();
+
+        // Set different flake inputs for each workspace
+        worktree1_ops
+            .set_flake_input("nixpkgs", "github:NixOS/nixpkgs/nixos-23.11")
+            .unwrap();
+        worktree2_ops
+            .set_flake_input("nixpkgs", "github:NixOS/nixpkgs/nixos-unstable")
+            .unwrap();
+
+        // Verify workspace1 config
+        let inputs1 = worktree1_ops.get_all_flake_inputs_worktree().unwrap();
+        assert_eq!(inputs1.len(), 1);
+        assert_eq!(inputs1[0].0, "nixpkgs");
+        assert_eq!(inputs1[0].1, "github:NixOS/nixpkgs/nixos-23.11");
+
+        // Verify workspace2 config
+        let inputs2 = worktree2_ops.get_all_flake_inputs_worktree().unwrap();
+        assert_eq!(inputs2.len(), 1);
+        assert_eq!(inputs2[0].0, "nixpkgs");
+        assert_eq!(inputs2[0].1, "github:NixOS/nixpkgs/nixos-unstable");
     }
 
     #[test]
