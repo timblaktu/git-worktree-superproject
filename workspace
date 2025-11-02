@@ -99,36 +99,64 @@ parse_flake_inputs() {
     
     [[ ! -f "$flake_file" ]] && return 1
     
-    # Use nix to evaluate the flake inputs safely
-    # This approach handles complex flake.nix files with imports and expressions
-    if command -v nix >/dev/null 2>&1; then
-        # Use nix flake metadata to get clean input information
-        nix flake metadata --json 2>/dev/null | jq -r '
-            .locks.nodes.root.inputs // {} | 
-            to_entries[] | 
-            select(.value != "follows") |
-            .key as $name |
-            .value as $input_name |
-            .key + " " + (.locks.nodes[$input_name].locked.type // "unknown") + " " + 
-            (if .locks.nodes[$input_name].locked.type == "github" then
-                "github:" + .locks.nodes[$input_name].locked.owner + "/" + .locks.nodes[$input_name].locked.repo + 
-                (if .locks.nodes[$input_name].locked.ref then "/" + .locks.nodes[$input_name].locked.ref else "" end)
-            elif .locks.nodes[$input_name].locked.type == "git" then
-                .locks.nodes[$input_name].locked.url + 
-                (if .locks.nodes[$input_name].locked.ref then "?ref=" + .locks.nodes[$input_name].locked.ref else "" end)
-            else
-                .locks.nodes[$input_name].original.url // "unknown"
-            end)
-        ' 2>/dev/null
-    else
-        # Fallback: simple regex parsing for basic cases
-        # This is less robust but works when nix isn't available
-        grep -A 1000 "inputs\s*=" "$flake_file" | 
-        grep -B 1000 -m 1 "};" | 
-        grep -E '^\s*[a-zA-Z0-9_-]+\s*\.' | 
-        sed -E 's/^\s*([a-zA-Z0-9_-]+)\.url\s*=\s*"([^"]+)".*/\1 \2/' |
-        grep -v "follows"
-    fi
+    # Parse flake.nix to extract input URLs
+    # Handles both simple format (input.url = "...") and complex format (input = { url = "..."; })
+    awk '
+        BEGIN { 
+            in_inputs = 0
+            current_input = ""
+            brace_depth = 0
+        }
+        
+        # Start of inputs section
+        /inputs\s*=\s*{/ { 
+            in_inputs = 1
+            brace_depth = 1
+            next 
+        }
+        
+        # Track brace depth to handle nested structures
+        in_inputs && /{/ { brace_depth++ }
+        in_inputs && /}/ { 
+            brace_depth--
+            if (brace_depth == 0) {
+                in_inputs = 0
+            }
+            if (current_input != "" && brace_depth == 1) {
+                current_input = ""  # End of current input block
+            }
+            next
+        }
+        
+        # Simple format: input.url = "url"
+        in_inputs && brace_depth == 1 && /^[[:space:]]*[a-zA-Z0-9_-]+\.url[[:space:]]*=/ {
+            gsub(/^[[:space:]]+/, "")  # Remove leading whitespace
+            gsub(/;.*$/, "")           # Remove trailing semicolon and comments
+            if (match($0, /^([a-zA-Z0-9_-]+)\.url[[:space:]]*=[[:space:]]*"([^"]+)"/, arr)) {
+                print arr[1] " " arr[2]
+            }
+            next
+        }
+        
+        # Complex format start: input = {
+        in_inputs && brace_depth == 1 && /^[[:space:]]*[a-zA-Z0-9_-]+[[:space:]]*=/ && /{/ {
+            gsub(/^[[:space:]]+/, "")
+            if (match($0, /^([a-zA-Z0-9_-]+)[[:space:]]*=/, arr)) {
+                current_input = arr[1]
+            }
+            next
+        }
+        
+        # Complex format URL line: url = "url";
+        in_inputs && brace_depth == 2 && current_input != "" && /^[[:space:]]*url[[:space:]]*=/ {
+            gsub(/^[[:space:]]+/, "")  # Remove leading whitespace
+            gsub(/;.*$/, "")           # Remove trailing semicolon and comments
+            if (match($0, /^url[[:space:]]*=[[:space:]]*"([^"]+)"/, arr)) {
+                print current_input " " arr[1]
+            }
+            next
+        }
+    ' "$flake_file"
 }
 
 # Get flake input URL by name
@@ -156,9 +184,9 @@ get_flake_input_url() {
     fi
     
     # Priority 3: Original flake.nix input (if we're in a flake directory)
-    # Note: Only return URLs for actual overrides, not original flake parsing
-    # The generate_workspace_flake function handles original URLs by copying the source
-    return 1
+    if [[ -f "flake.nix" ]]; then
+        parse_flake_inputs | grep "^$input_name " | cut -d' ' -f3-
+    fi
 }
 
 # Generate workspace-specific flake.nix with appropriate inputs
@@ -169,11 +197,14 @@ generate_workspace_flake() {
     
     [[ ! -f "$source_flake" ]] && { echo "Source flake not found: $source_flake" >&2; return 1; }
     
-    # Copy source flake to target location
-    cp "$source_flake" "$target_flake"
+    # Read the source flake
+    local flake_content
+    flake_content=$(<"$source_flake")
     
-    # Check if there are any workspace-specific overrides
-    local has_overrides=false
+    # Parse inputs and apply workspace-specific overrides
+    local modified_content="$flake_content"
+    
+    # Extract the inputs section and process each input
     while IFS= read -r input_line; do
         [[ -z "$input_line" ]] && continue
         
@@ -185,53 +216,87 @@ generate_workspace_flake() {
         override_url=$(get_flake_input_url "$input_name" "$workspace")
         
         if [[ -n "$override_url" ]]; then
-            has_overrides=true
-            break
+            # Replace the URL using AST-based modification for perfect structure preservation
+            local temp_file=$(mktemp)
+            echo "$modified_content" > "$temp_file"
+            
+            # Use flake-input-modifier for AST-based replacement
+            local flake_modifier_binary="$WORKSPACE_ROOT/flake-input-modifier/target/debug/flake-input-modifier"
+            
+            if [[ -x "$flake_modifier_binary" ]]; then
+                # Use the AST-based binary for precise modification
+                local current_url
+                current_url=$(parse_flake_inputs "$temp_file" | grep "^$input_name " | cut -d' ' -f2-)
+                
+                if [[ -n "$current_url" ]]; then
+                    modified_content=$("$flake_modifier_binary" "$temp_file" "$input_name" "$current_url" "$override_url")
+                fi
+            else
+                # Fallback to Python-based approach (legacy)
+                echo "Warning: flake-input-modifier binary not found, using fallback method" >&2
+                
+                python3 -c "
+import re
+import sys
+
+# Read the flake content
+with open('$temp_file', 'r') as f:
+    content = f.read()
+
+# Pattern 1: Simple format - input.url = \"url\";
+pattern1 = r'^(\s*$input_name\.url\s*=\s*\")[^\"]+(\";.*$)'
+content = re.sub(pattern1, r'\g<1>$override_url\g<2>', content, flags=re.MULTILINE)
+
+# Pattern 2: Complex format - find input block and replace URL inside
+# First, find the input block
+input_pattern = r'^(\s*)($input_name)(\s*=\s*\{)'
+lines = content.split('\n')
+result_lines = []
+in_target_block = False
+brace_count = 0
+indent_level = 0
+
+for line in lines:
+    if not in_target_block:
+        # Check if this line starts our target input block
+        match = re.match(input_pattern, line)
+        if match:
+            in_target_block = True
+            brace_count = 1
+            indent_level = len(match.group(1))
+            result_lines.append(line)
+            continue
+    
+    if in_target_block:
+        # Count braces to track block end
+        brace_count += line.count('{') - line.count('}')
+        
+        # If we're in the target block and this is a URL line, replace it
+        if brace_count >= 1 and re.match(r'^\s*url\s*=\s*\"[^\"]*\";', line):
+            # Replace the URL
+            line = re.sub(r'(^\s*url\s*=\s*\")[^\"]+(\";.*$)', r'\g<1>$override_url\g<2>', line)
+        
+        # Check if we've closed the target block
+        if brace_count <= 0:
+            in_target_block = False
+    
+    result_lines.append(line)
+
+# Write the result
+with open('${temp_file}.new', 'w') as f:
+    f.write('\\n'.join(result_lines))
+"
+                
+                modified_content=$(<"${temp_file}.new")
+                rm -f "${temp_file}.new"
+            fi
+            
+            rm -f "$temp_file"
         fi
     done < <(parse_flake_inputs "$source_flake")
     
-    # Only process inputs if there are actual overrides
-    if [[ "$has_overrides" == "true" ]]; then
-        # Extract the inputs section and process each input
-        while IFS= read -r input_line; do
-            [[ -z "$input_line" ]] && continue
-            
-            local input_name url_part
-            read -r input_name url_part <<< "$input_line"
-            
-            # Check if there's a workspace-specific override for this input
-            local override_url
-            override_url=$(get_flake_input_url "$input_name" "$workspace")
-            
-            if [[ -n "$override_url" ]]; then
-                # Extract current URL from flake for AST tool
-                local current_url
-                current_url=$(grep -E "^\s*$input_name\.url\s*=" "$target_flake" | sed -E 's/.*=\s*"([^"]+)".*/\1/')
-                
-                # Use AST-based replacement with graceful fallback to sed
-                local ast_binary="$WORKSPACE_ROOT/bin/flake-input-modifier"
-                if [[ -x "$ast_binary" && -n "$current_url" ]] && "$ast_binary" "$target_flake" "$input_name" "$current_url" "$override_url" --in-place 2>/dev/null; then
-                    # AST modification succeeded
-                    true
-                else
-                    # Fallback to sed-based replacement
-                    if [[ -z "$current_url" ]]; then
-                        echo "  Info: Using sed fallback for $input_name (complex flake structure)" >&2
-                    else
-                        echo "  Warning: AST modification failed for $input_name, using sed fallback" >&2
-                    fi
-                    # Read the current flake content
-                    local flake_content
-                    flake_content=$(<"$target_flake")
-                    # Handle both simple format: input.url = "url"
-                    # and complex format with follows
-                    local modified_content
-                    modified_content=$(echo "$flake_content" | sed -E "s|(^\s*$input_name\.url\s*=\s*\")[^\"]+(\";.*$)|\1$override_url\2|")
-                    echo "$modified_content" > "$target_flake"
-                fi
-            fi
-        done < <(parse_flake_inputs "$source_flake")
-    fi
+    # Write the modified flake
+    echo "$modified_content" > "$target_flake"
 }
 
 # Ensure central repository exists
