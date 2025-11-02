@@ -1,12 +1,18 @@
 # Git Worktree Superproject - Unified Workspace Manager
 
-## ⚠️ CRITICAL PROJECT-SPECIFIC RULES ⚠️ 
+## ⚠️ CRITICAL PROJECT-SPECIFIC RULES ⚠️
 - **SESSION CONTINUITY**: Update this CLAUDE.md file with task progress and provide end-of-response summary of changes made
 - **COMPLETION STANDARD**: Tasks complete ONLY when: (1) `git add` all files, (2) `cargo check` passes, (3) `cargo test` succeeds, (4) end-to-end functionality demonstrated. **Writing code ≠ Working system**
 - **NEVER WORK ON MAIN OR MASTER BRANCH**: Current branch is `rust-migration` - continue development here
 - **MANDATORY GIT COMMITS AT INFLECTION POINTS**: ALWAYS `git add` and `git commit` ALL relevant changes before finalizing your response to user
 - **CONSERVATIVE TASK COMPLETION**: NEVER mark tasks as "completed" prematurely. Err on side of leaving tasks "in_progress" or "pending" for review in next session.
 - **RUST-FIRST APPROACH**: This is now a Rust migration project - prioritize Rust solutions over bash/python patches
+- **🚨 DESTRUCTIVE COMMAND SAFETY 🚨**:
+  - NEVER use `rm -rf ~/` or `rm -rf /home/*` - these delete home directory
+  - ALWAYS use FULL ABSOLUTE PATHS with destructive commands
+  - ALWAYS test with `ls` before any `rm -rf`
+  - A directory can be NAMED `~` (literal char) vs `~` (shell expansion to $HOME)
+  - When in doubt: ask user before running ANY `rm -rf` command
 
 ## 📊 **CURRENT SYSTEM STATUS**
 
@@ -145,6 +151,12 @@ Plan integration of existing Rust AST system into new unified project.
 3. [x] **PRIORITY 2**: Integrate flake-input-modifier API into cmd_flake - ✅ COMPLETE (Session 3)
 4. [ ] **PRIORITY 3**: Implement configuration management enhancements - NEXT
 5. [ ] **ONGOING**: Begin migrating Python tests to Rust
+
+⚠️ **CLEANUP TASK** (Safe to do manually):
+- Leftover buggy directory: `/home/tim/src/git-worktree-superproject/~` (literal tilde name)
+- Created by old bug before fix - contains empty `.worktrees` subdirectory
+- **SAFE removal**: `rm -rf "/home/tim/src/git-worktree-superproject/~"` (from project root)
+- **NEVER EVER**: `rm -rf ~/` (would delete entire home directory!)
 
 ## 🎯 **NEXT SESSION START**
 
