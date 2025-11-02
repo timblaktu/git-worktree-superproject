@@ -128,7 +128,7 @@ fn reconstruct_node_exactly(builder: &mut GreenNodeBuilder, node: &SyntaxNode) {
 }
 
 /// Public API function to replace a URL in a flake.nix file
-pub fn replace_flake_input_url(flake_content: &str, input_name: &str, old_url: &str, new_url: &str) -> Result<String, String> {
+pub fn replace_flake_input_url(flake_content: &str, _input_name: &str, old_url: &str, new_url: &str) -> Result<String, String> {
     let parse_result = Root::parse(flake_content);
     let tree = parse_result.tree();
     
