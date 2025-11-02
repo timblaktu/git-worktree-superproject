@@ -1328,3 +1328,509 @@ fn test_config_multiple_flake_inputs() {
         ))
         .stdout(predicate::str::contains("github:numtide/flake-utils"));
 }
+
+// ============================================================================
+// Regenerate Flake Command Tests
+// ============================================================================
+
+#[test]
+fn test_regenerate_flake_basic() {
+    let fixture = CliTestFixture::new();
+
+    // Create a workspace
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "flake-test", "--branch", "flake-branch"])
+        .current_dir(fixture.path());
+    cmd_add.assert().success();
+
+    // Create a minimal source flake.nix
+    let source_flake = fixture.path().join("flake.nix");
+    fs::write(
+        &source_flake,
+        r#"{
+  description = "Test flake";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    home-manager.url = "github:nix-community/home-manager/release-23.11";
+  };
+  outputs = { self, nixpkgs, home-manager }: { };
+}"#,
+    )
+    .expect("Failed to write source flake");
+
+    // Regenerate flake for workspace
+    let mut cmd_regen = fixture.workspace_cmd();
+    cmd_regen
+        .args([
+            "regenerate-flake",
+            "flake-test",
+            "--source",
+            source_flake.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+
+    cmd_regen
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Regenerating flake.nix"))
+        .stdout(predicate::str::contains("regenerated successfully"));
+
+    // Verify output flake was created
+    let output_flake = fixture
+        .path()
+        .join(".worktrees")
+        .join("flake-test")
+        .join("flake.nix");
+    assert!(
+        output_flake.exists(),
+        "Output flake should be created in workspace"
+    );
+
+    // Verify output flake content matches source (no overrides configured yet)
+    let output_content = fs::read_to_string(&output_flake).expect("Failed to read output flake");
+    assert!(output_content.contains("nixos-23.11"));
+    assert!(output_content.contains("home-manager"));
+}
+
+#[test]
+fn test_regenerate_flake_with_workspace_override() {
+    let fixture = CliTestFixture::new();
+
+    // Create a workspace
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "override-test", "--branch", "override-branch"])
+        .current_dir(fixture.path());
+    cmd_add.assert().success();
+
+    // Set flake input override for workspace
+    let mut cmd_set_input = fixture.workspace_cmd();
+    cmd_set_input
+        .args([
+            "config",
+            "set-flake-input",
+            "override-test",
+            "nixpkgs",
+            "github:NixOS/nixpkgs/nixos-unstable",
+        ])
+        .current_dir(fixture.path());
+    cmd_set_input.assert().success();
+
+    // Create source flake
+    let source_flake = fixture.path().join("flake.nix");
+    fs::write(
+        &source_flake,
+        r#"{
+  description = "Override test flake";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+  };
+  outputs = { self, nixpkgs }: { };
+}"#,
+    )
+    .expect("Failed to write source flake");
+
+    // Regenerate flake with overrides
+    let mut cmd_regen = fixture.workspace_cmd();
+    cmd_regen
+        .args([
+            "regenerate-flake",
+            "override-test",
+            "--source",
+            source_flake.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+
+    cmd_regen
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Applied input overrides"))
+        .stdout(predicate::str::contains("nixpkgs"))
+        .stdout(predicate::str::contains("nixos-unstable"))
+        .stdout(predicate::str::contains("workspace-specific"));
+
+    // Verify output flake has the override applied
+    let output_flake = fixture
+        .path()
+        .join(".worktrees")
+        .join("override-test")
+        .join("flake.nix");
+    let output_content = fs::read_to_string(&output_flake).expect("Failed to read output flake");
+    assert!(
+        output_content.contains("nixos-unstable"),
+        "Output flake should contain overridden URL"
+    );
+    assert!(
+        !output_content.contains("nixos-23.11"),
+        "Output flake should not contain original URL"
+    );
+}
+
+#[test]
+fn test_regenerate_flake_with_default_override() {
+    let fixture = CliTestFixture::new();
+
+    // Create a workspace
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "default-test", "--branch", "default-branch"])
+        .current_dir(fixture.path());
+    cmd_add.assert().success();
+
+    // Set default flake input override
+    let mut cmd_set_default = fixture.workspace_cmd();
+    cmd_set_default
+        .args([
+            "config",
+            "set-flake-input-default",
+            "home-manager",
+            "github:nix-community/home-manager/master",
+        ])
+        .current_dir(fixture.path());
+    cmd_set_default.assert().success();
+
+    // Create source flake
+    let source_flake = fixture.path().join("flake.nix");
+    fs::write(
+        &source_flake,
+        r#"{
+  description = "Default override test";
+  inputs = {
+    home-manager.url = "github:nix-community/home-manager/release-23.11";
+  };
+  outputs = { self, home-manager }: { };
+}"#,
+    )
+    .expect("Failed to write source flake");
+
+    // Regenerate flake
+    let mut cmd_regen = fixture.workspace_cmd();
+    cmd_regen
+        .args([
+            "regenerate-flake",
+            "default-test",
+            "--source",
+            source_flake.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+
+    cmd_regen
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Applied input overrides"))
+        .stdout(predicate::str::contains("home-manager"))
+        .stdout(predicate::str::contains("master"))
+        .stdout(predicate::str::contains("(default)"));
+
+    // Verify output flake has default override applied
+    let output_flake = fixture
+        .path()
+        .join(".worktrees")
+        .join("default-test")
+        .join("flake.nix");
+    let output_content = fs::read_to_string(&output_flake).expect("Failed to read output flake");
+    assert!(
+        output_content.contains("master"),
+        "Output flake should contain default override URL"
+    );
+}
+
+#[test]
+fn test_regenerate_flake_workspace_override_takes_precedence() {
+    let fixture = CliTestFixture::new();
+
+    // Create a workspace
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "precedence-test", "--branch", "precedence-branch"])
+        .current_dir(fixture.path());
+    cmd_add.assert().success();
+
+    // Set default override
+    let mut cmd_set_default = fixture.workspace_cmd();
+    cmd_set_default
+        .args([
+            "config",
+            "set-flake-input-default",
+            "nixpkgs",
+            "github:NixOS/nixpkgs/nixos-23.11",
+        ])
+        .current_dir(fixture.path());
+    cmd_set_default.assert().success();
+
+    // Set workspace-specific override (should take precedence)
+    let mut cmd_set_workspace = fixture.workspace_cmd();
+    cmd_set_workspace
+        .args([
+            "config",
+            "set-flake-input",
+            "precedence-test",
+            "nixpkgs",
+            "github:NixOS/nixpkgs/nixos-unstable",
+        ])
+        .current_dir(fixture.path());
+    cmd_set_workspace.assert().success();
+
+    // Create source flake
+    let source_flake = fixture.path().join("flake.nix");
+    fs::write(
+        &source_flake,
+        r#"{
+  description = "Precedence test";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.11";
+  };
+  outputs = { self, nixpkgs }: { };
+}"#,
+    )
+    .expect("Failed to write source flake");
+
+    // Regenerate flake
+    let mut cmd_regen = fixture.workspace_cmd();
+    cmd_regen
+        .args([
+            "regenerate-flake",
+            "precedence-test",
+            "--source",
+            source_flake.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+
+    cmd_regen
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nixos-unstable"))
+        .stdout(predicate::str::contains("workspace-specific"));
+
+    // Verify workspace-specific override is used (not default)
+    let output_flake = fixture
+        .path()
+        .join(".worktrees")
+        .join("precedence-test")
+        .join("flake.nix");
+    let output_content = fs::read_to_string(&output_flake).expect("Failed to read output flake");
+    assert!(
+        output_content.contains("nixos-unstable"),
+        "Should use workspace-specific override"
+    );
+    assert!(
+        !output_content.contains("nixos-23.11"),
+        "Should not use default override"
+    );
+    assert!(
+        !output_content.contains("nixos-22.11"),
+        "Should not use original"
+    );
+}
+
+#[test]
+fn test_regenerate_flake_custom_output_path() {
+    let fixture = CliTestFixture::new();
+
+    // Create a workspace
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "custom-out-test", "--branch", "custom-branch"])
+        .current_dir(fixture.path());
+    cmd_add.assert().success();
+
+    // Create source flake
+    let source_flake = fixture.path().join("flake.nix");
+    fs::write(
+        &source_flake,
+        r#"{
+  description = "Custom output test";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+  };
+  outputs = { self, nixpkgs }: { };
+}"#,
+    )
+    .expect("Failed to write source flake");
+
+    // Custom output path
+    let custom_output = fixture.path().join("custom-flake.nix");
+
+    // Regenerate flake with custom output
+    let mut cmd_regen = fixture.workspace_cmd();
+    cmd_regen
+        .args([
+            "regenerate-flake",
+            "custom-out-test",
+            "--source",
+            source_flake.to_str().unwrap(),
+            "--output",
+            custom_output.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+
+    cmd_regen
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(custom_output.to_str().unwrap()));
+
+    // Verify custom output file was created
+    assert!(
+        custom_output.exists(),
+        "Custom output file should be created"
+    );
+}
+
+#[test]
+fn test_regenerate_flake_missing_source_fails() {
+    let fixture = CliTestFixture::new();
+
+    // Create a workspace
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "missing-src-test", "--branch", "missing-branch"])
+        .current_dir(fixture.path());
+    cmd_add.assert().success();
+
+    let nonexistent_source = fixture.path().join("nonexistent.nix");
+
+    // Try to regenerate with missing source
+    let mut cmd_regen = fixture.workspace_cmd();
+    cmd_regen
+        .args([
+            "regenerate-flake",
+            "missing-src-test",
+            "--source",
+            nonexistent_source.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+
+    cmd_regen
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not found").or(predicate::str::contains("Source")));
+}
+
+#[test]
+fn test_regenerate_flake_nonexistent_workspace_fails() {
+    let fixture = CliTestFixture::new();
+
+    // Create source flake
+    let source_flake = fixture.path().join("flake.nix");
+    fs::write(
+        &source_flake,
+        r#"{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs";
+  };
+  outputs = { self, nixpkgs }: { };
+}"#,
+    )
+    .expect("Failed to write source flake");
+
+    // Try to regenerate for nonexistent workspace
+    let mut cmd_regen = fixture.workspace_cmd();
+    cmd_regen
+        .args([
+            "regenerate-flake",
+            "nonexistent-workspace",
+            "--source",
+            source_flake.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+
+    cmd_regen.assert().failure().stderr(
+        predicate::str::contains("does not exist").or(predicate::str::contains("Workspace")),
+    );
+}
+
+#[test]
+fn test_regenerate_flake_multiple_inputs_with_mixed_overrides() {
+    let fixture = CliTestFixture::new();
+
+    // Create a workspace
+    let mut cmd_add = fixture.workspace_cmd();
+    cmd_add
+        .args(["add", "mixed-test", "--branch", "mixed-branch"])
+        .current_dir(fixture.path());
+    cmd_add.assert().success();
+
+    // Set default override for home-manager
+    let mut cmd_set_default = fixture.workspace_cmd();
+    cmd_set_default
+        .args([
+            "config",
+            "set-flake-input-default",
+            "home-manager",
+            "github:nix-community/home-manager/master",
+        ])
+        .current_dir(fixture.path());
+    cmd_set_default.assert().success();
+
+    // Set workspace-specific override for nixpkgs
+    let mut cmd_set_workspace = fixture.workspace_cmd();
+    cmd_set_workspace
+        .args([
+            "config",
+            "set-flake-input",
+            "mixed-test",
+            "nixpkgs",
+            "github:NixOS/nixpkgs/nixos-unstable",
+        ])
+        .current_dir(fixture.path());
+    cmd_set_workspace.assert().success();
+
+    // Create source flake with 3 inputs (one unmodified, one default override, one workspace override)
+    let source_flake = fixture.path().join("flake.nix");
+    fs::write(
+        &source_flake,
+        r#"{
+  description = "Mixed overrides test";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    home-manager.url = "github:nix-community/home-manager/release-23.11";
+    flake-utils.url = "github:numtide/flake-utils";
+  };
+  outputs = { self, nixpkgs, home-manager, flake-utils }: { };
+}"#,
+    )
+    .expect("Failed to write source flake");
+
+    // Regenerate flake
+    let mut cmd_regen = fixture.workspace_cmd();
+    cmd_regen
+        .args([
+            "regenerate-flake",
+            "mixed-test",
+            "--source",
+            source_flake.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+
+    cmd_regen
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Applied input overrides"));
+
+    // Verify output flake
+    let output_flake = fixture
+        .path()
+        .join(".worktrees")
+        .join("mixed-test")
+        .join("flake.nix");
+    let output_content = fs::read_to_string(&output_flake).expect("Failed to read output flake");
+
+    // nixpkgs should be overridden to unstable (workspace-specific)
+    assert!(
+        output_content.contains("nixos-unstable"),
+        "nixpkgs should use workspace override"
+    );
+
+    // home-manager should be overridden to master (default)
+    assert!(
+        output_content.contains("master"),
+        "home-manager should use default override"
+    );
+
+    // flake-utils should remain unchanged (no override)
+    assert!(
+        output_content.contains("flake-utils"),
+        "flake-utils should remain in output"
+    );
+}
