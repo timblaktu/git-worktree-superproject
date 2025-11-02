@@ -46,16 +46,16 @@
 - **Phase 1-3:** ✅ COMPLETE (Single-repo worktree - 72 tests)
 - **Phase 4:** ✅ COMPLETE (Multi-repo test design - 28 test stubs)
 - **Phase 5:** ✅ COMPLETE (Multi-repo test implementation)
-- **Phase 6 Library:** ✅ COMPLETE (All 167 tests passing + semantic bug fixed)
+- **Phase 6 Library:** ✅ COMPLETE (All 95 workspace tests passing + semantic bug fixed)
 - **Phase 6 CLI:** ❌ NOT STARTED (0% complete)
 
 **Current Test Status:**
-- Unit tests (lib): 72/72 ✅
-- Unit tests (bin): 72/72 ✅
-- Integration tests: 19/19 ✅
-- Property tests: 4/4 ✅
-- CLI tests: 0/0 (not yet written)
-- **TOTAL: 167/167 library tests passing (100%)**
+- workspace_manager lib unit tests: 72/72 ✅ (67 Phase 1-3 + 5 Phase 6 tests)
+- workspace_manager integration tests: 19/19 ✅ (multi_repo_workspace.rs)
+- workspace_manager property tests: 4/4 ✅ (workspace_properties.rs)
+- flake_input_modifier tests: 3/3 ✅
+- **TOTAL: 98 unique test functions (cargo shows 170 test runs due to lib+bin)**
+- CLI end-to-end tests: 0/0 (not yet written)
 
 **Next Session Priority Tasks:**
 1. Add CLI commands: workspace switch/sync/foreach
@@ -289,9 +289,10 @@
 - [x] ✅ Updated sync() to use pull() return value correctly
   - Only adds repo to repos_updated when pull() returns true
   - Prevents misleading reports of "updated" when repos already current
-- [x] ✅ ALL 167 tests still passing with no test modifications required
+- [x] ✅ ALL 98 tests still passing with no test modifications required
   - test_sync_pulls_updates_from_all_repos: Correctly reports updates after new commits
   - test_sync_idempotency: Both syncs correctly report 0 updates (no new commits)
+  - All integration and property tests validate correct behavior
 - [x] ✅ Committed semantic bug fix (commit: 902e8ed)
 
 **Impact of Fix**:
