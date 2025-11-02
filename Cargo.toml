@@ -1,0 +1,37 @@
+[workspace]
+members = [
+    "workspace-manager",
+    "flake-input-modifier",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Tim <tim@example.com>"]
+
+[workspace.dependencies]
+# Git operations
+git2 = { version = "0.19", features = ["vendored-openssl", "vendored-libgit2"] }
+# CLI
+clap = { version = "4.5", features = ["derive", "cargo"] }
+# Configuration and serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+# Async runtime (for future use)
+tokio = { version = "1.40", features = ["full"] }
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+# File system operations
+walkdir = "2.5"
+dirs = "5.0"
+# Nix AST parsing (from existing flake-input-modifier)
+rnix = "0.12.0"
+rowan = "0.15.17"
+# Testing utilities
+tempfile = "3.0"

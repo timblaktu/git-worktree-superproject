@@ -12,32 +12,32 @@ fn main() {
             Arg::new("flake_path")
                 .help("Path to the flake.nix file (use '-' for stdin)")
                 .required(true)
-                .index(1)
+                .index(1),
         )
         .arg(
             Arg::new("input_name")
                 .help("Name of the input to modify")
                 .required(true)
-                .index(2)
+                .index(2),
         )
         .arg(
             Arg::new("old_url")
                 .help("Current URL to replace")
                 .required(true)
-                .index(3)
+                .index(3),
         )
         .arg(
             Arg::new("new_url")
                 .help("New URL to use")
                 .required(true)
-                .index(4)
+                .index(4),
         )
         .arg(
             Arg::new("in_place")
                 .short('i')
                 .long("in-place")
                 .help("Modify the file in-place instead of writing to stdout")
-                .action(clap::ArgAction::SetTrue)
+                .action(clap::ArgAction::SetTrue),
         )
         .get_matches();
 
@@ -91,20 +91,21 @@ mod tests {
     #[test]
     fn test_cli_functionality() {
         let flake_content = r#"{ inputs = { nixpkgs.url = "github:NixOS/nixpkgs"; }; }"#;
-        
+
         // Create a temporary file
         let mut temp_file = NamedTempFile::new().unwrap();
         fs::write(temp_file.path(), flake_content).unwrap();
-        
+
         // Test the CLI (this would require the binary to be built)
         // For now, just test the core functionality
         let result = replace_flake_input_url(
             flake_content,
             "nixpkgs",
             "github:NixOS/nixpkgs",
-            "git+file:///local/nixpkgs"
-        ).unwrap();
-        
+            "git+file:///local/nixpkgs",
+        )
+        .unwrap();
+
         assert!(result.contains("git+file:///local/nixpkgs"));
     }
 }
