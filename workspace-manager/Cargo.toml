@@ -37,3 +37,5 @@ tempfile = { workspace = true }
 mockall = "0.13"
 rstest = "0.23"
 proptest = "1.5"
+assert_cmd = "2.0"
+predicates = "3.1"

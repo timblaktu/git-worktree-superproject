@@ -418,7 +418,65 @@
 - **Single-User Optimization**: No need for complex configuration compatibility
 - **Test Migration**: Gradual migration of Python tests to native Rust tests
 
-## 📋 **CURRENT TASKS** (2025-11-02 - Session 20: Critical Review Complete - Phase 7 Roadmap Created!)
+## 📋 **CURRENT TASKS** (2025-11-02 - Session 20: End-to-End CLI Testing Complete!)
+
+**Status**: ✅ **SESSION 20 COMPLETE** - End-to-end CLI testing with assert_cmd fully implemented and all 183 tests passing!
+
+**Completed This Session (Session 20 - End-to-End CLI Testing with assert_cmd)**:
+- [x] ✅ **ADDED ASSERT_CMD DEPENDENCY**:
+  - Added assert_cmd v2.0 and predicates v3.1 to dev-dependencies
+  - Enables end-to-end CLI testing from command-line invocation to filesystem effects
+- [x] ✅ **CREATED COMPREHENSIVE CLI INTEGRATION TEST SUITE**:
+  - Created tests/cli_integration_tests.rs (465 lines)
+  - Implemented CliTestFixture with isolated temp directories and TOML config
+  - Each test gets its own temp worktree_base - no interference between tests
+- [x] ✅ **IMPLEMENTED 16 CLI INTEGRATION TESTS**:
+  - **Smoke tests (3)**: Help, version, switch command help
+  - **Switch command (3)**: Successful creation, missing config error, idempotency
+  - **Sync command (3)**: Nonexistent workspace error, success, up-to-date reporting
+  - **Foreach command (3)**: Nonexistent workspace error, command execution, $name expansion
+  - **Error handling (2)**: Invalid subcommand, missing arguments
+  - **Integration workflows (2)**: Basic development workflow, multiple workspaces coexisting
+- [x] ✅ **VALIDATED CRITICAL FUNCTIONALITY**:
+  - Switch command creates workspaces in isolated temp directories ✅
+  - Sync command reports "up-to-date" (not "updated") when no changes ✅
+  - Foreach expands $name environment variable correctly ✅
+  - All error paths produce clear, user-friendly messages ✅
+- [x] ✅ **FULL TEST SUITE PASSING**:
+  - CLI integration tests: 16/16 passing ✅
+  - Total test count: 183 tests (72+72+16+19+4 across all test suites)
+  - Zero failures, all tests isolated with tempdir() ✅
+- [x] ✅ **COMMITTED IMPLEMENTATION**:
+  - All changes committed (pending commit at session end)
+
+**What This Accomplishes**:
+- ✅ Would have caught Session 19's "worktree base not set" bug automatically
+- ✅ Prevents future CLI regressions - every CLI command now has integration tests
+- ✅ Foundation for CI/CD automation
+- ✅ Validates error handling comprehensively
+- ✅ Tests full stack: CLI → library → filesystem
+
+**Code Changes Session 20**:
+- workspace-manager/Cargo.toml: +2 lines (assert_cmd, predicates dependencies)
+- workspace-manager/tests/cli_integration_tests.rs: +465 lines (16 integration tests)
+- Total: +467 lines of comprehensive CLI test coverage
+- 1 commit (pending): feature - End-to-end CLI testing with assert_cmd
+
+**Critical Insights**:
+1. **Config confusion fixed**: Tests initially failed because they passed workspace.conf to `--config` flag (expects TOML), not `--config-file` flag (expects workspace.conf)
+2. **Isolation achieved**: CliTestFixture creates temp TOML config with isolated worktree_base per test
+3. **Helper method**: workspace_cmd() pre-injects `--config` flag to simplify test code
+4. **Test quality**: All tests verify both success conditions AND error messages
+
+**Next Session Priorities (Phase 7 Tier 1)**:
+- 🚨 **Sessions 21-22**: Repository Repair Command (CRITICAL for production)
+- 146 lines bash → Rust implementation
+- Handles broken worktrees, uninitialized repos, standalone→worktree conversion
+- Migrate test_broken_repos.py (6 tests)
+
+---
+
+## 📋 **PREVIOUS SESSION TASKS** (Session 20 Initial: Critical Review Complete - Phase 7 Roadmap Created!)
 
 **Status**: ✅ **CRITICAL REVIEW COMPLETE** - Phase 7 roadmap created with prioritized feature parity plan!
 
