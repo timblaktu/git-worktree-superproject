@@ -22,92 +22,186 @@
 
 ---
 
-## 🚀 **NEXT SESSION: Documentation & Polish**
+## 🚀 **NEXT SESSION: Phase 7 - Feature Parity Roadmap**
 
 **Command to resume:** "Begin work on your top-priority task"
 
-**Phase 6 Status:** ✅ **PHASE 6 COMPLETE** - All features implemented, tested, and validated!
+**Phase 6 Status:** ✅ **PHASE 6 100% COMPLETE** - All core features implemented, tested, and validated!
 
-**What's Done:**
-- ✅ Library layer: All workspace operations implemented (switch, list, remove, foreach, status, sync)
-- ✅ Workspace config persistence enables stateful operations
-- ✅ Property-based invariants validated across generated inputs
-- ✅ **ALL 98 library tests passing (100%)**
-- ✅ foreach() uses sh -c for proper environment variable expansion
-- ✅ Multi-repo workspace creation with pinned repo support
-- ✅ **Semantic bug FIXED**: sync() now accurately reports only repos with actual updates
-- ✅ **CLI commands implemented AND VALIDATED** end-to-end with real GitHub repos:
-  - `workspace switch <name>` - ✅ creates multi-repo workspace, saves config
-  - `workspace sync <name>` - ✅ pulls updates, reports accurate status
-  - `workspace foreach <name> <command>` - ✅ runs commands with $name expansion
-- ✅ **CRITICAL BUG FIXED**: Added set_worktree_base() method for CLI initialization
-- ✅ **Example workspace.conf created** with documentation
-- ✅ **Error handling validated**: Missing files, nonexistent workspaces, all error paths tested
+**🔍 CRITICAL REVIEW COMPLETE** (Session 20):
 
-**Optional Next Steps:**
-- 📖 Document workspace.conf format in README
-- 📖 Add usage examples and getting started guide
-- 📦 Consider publishing as standalone tool
+**What Was Reviewed:**
+- ✅ **Bash script analysis**: 1,481 lines, 27 functions (comprehensive feature set)
+- ✅ **Python test analysis**: 167 tests across 12 files, 5,095 lines
+- ✅ **Rust implementation analysis**: 98 tests, 5,054 lines (lib + tests)
+- ✅ **PYTEST_CARGO_MIGRATION.md application**: Verified Rust-idiomatic patterns
+- ✅ **Best practices review**: Identified crate opportunities (clap_complete, assert_cmd, tracing, insta)
 
-**Phase Status:**
-- **Phase 1-3:** ✅ COMPLETE (Single-repo worktree - 72 tests)
-- **Phase 4:** ✅ COMPLETE (Multi-repo test design - 28 test stubs)
-- **Phase 5:** ✅ COMPLETE (Multi-repo test implementation)
-- **Phase 6 Library:** ✅ COMPLETE (All 95 workspace tests passing + semantic bug fixed)
-- **Phase 6 CLI:** ⚠️ INTEGRATED (commands implemented, **UNTESTED with real data**)
+**📊 Feature Parity Analysis:**
+
+**✅ IMPLEMENTED FEATURES (Core multi-repo operations):**
+1. switch_workspace() - ✅ WorkspaceManagerImpl::switch() + CLI
+2. sync_workspace() - ✅ WorkspaceManagerImpl::sync() + CLI
+3. show_status() - ✅ WorkspaceManagerImpl::status() (library only - no CLI command yet)
+4. foreach_repos() - ✅ WorkspaceManagerImpl::foreach() + CLI
+5. list_workspaces() - ✅ WorkspaceManagerImpl::list() (library only - no CLI command yet)
+6. clean_workspace() - ✅ WorkspaceManagerImpl::remove() (library only - no interactive CLI)
+
+**🚨 CRITICAL MISSING FEATURES (Must implement for production):**
+1. **repair_repository()** - 146 lines bash, 6 Python tests - ❌ COMPLETELY MISSING
+   - Handles broken worktrees, uninitialized repos, standalone→worktree conversion
+   - CRITICAL for production use (users WILL encounter broken repos)
+
+2. **Config management CLI commands** - ~160 lines bash - ❌ CLI NOT EXPOSED
+   - config set, show, import, set-default (library has git config operations, needs CLI)
+
+3. **End-to-end CLI testing with assert_cmd** - ❌ NO CLI INTEGRATION TESTS
+   - Would have caught Session 19's "worktree base not set" bug
+   - test_integration_workflows.py (10 tests) not migrated
+
+**⚠️ IMPORTANT MISSING FEATURES (Nix ecosystem):**
+4. **Nix flake input override system** - ~260 lines bash - ❌ COMPLETELY MISSING
+   - workspace.flake.input.{name}.url git config storage
+   - 3-tier inheritance for flake inputs
+   - test_workspace_advanced.py (~17 tests) not migrated
+
+5. **Workspace-specific flake.nix generation** - 98 lines bash - ❌ COMPLETELY MISSING
+   - generate_workspace_flake() with AST modification
+   - regenerate-flake command
+
+**✅ NICE-TO-HAVE FEATURES:**
+6. **Shell completions with clap_complete** - Can auto-generate (eliminates 113 lines bash)
+7. **Structured logging with tracing** - Replace println! for better debugging
+8. **Snapshot testing with insta** - Better CLI output validation
+
+**📈 Test Coverage Analysis:**
+
+**Migrated (57 Python tests → 62 Rust tests):**
+- test_config_errors.py: 21 → 22 Rust tests ✅
+- test_config.py: 8 → 12 Rust tests ✅
+- test_per_workspace_config.py: 11 → 11 Rust tests ✅
+- test_worktree_operations.py: 17 → 17 Rust tests ✅
+
+**Created (Phase 4-6):**
+- Multi-repo workspace tests: 26 tests (5 unit + 19 integration + 4 property) ✅
+
+**NOT Migrated (110 Python tests):**
+- test_broken_repos.py: 6 tests (repair) ❌
+- test_completions.py: 6 tests (bash/zsh) ❌
+- test_integration_workflows.py: 10 tests (end-to-end) ❌
+- test_missing_coverage.py: 12 tests (edge cases) ❌
+- test_superproject_configurations.py: 14 tests (superproject) ❌
+- test_superproject_edge_cases.py: 12 tests (edge cases) ❌
+- test_workspace_advanced.py: 17 tests (flake inputs) ❌
+- test_workspace.py: ~33 tests (some covered, some not) ⚠️
 
 **Current Test Status:**
-- workspace_manager lib unit tests: 72/72 ✅ (67 Phase 1-3 + 5 Phase 6 tests)
-- workspace_manager integration tests: 19/19 ✅ (multi_repo_workspace.rs)
-- workspace_manager property tests: 4/4 ✅ (workspace_properties.rs)
-- flake_input_modifier tests: 3/3 ✅
-- **TOTAL: 98 unique test functions (cargo shows 170 test runs due to lib+bin)**
-- CLI binary: ✅ Compiles and runs (67MB executable)
+- Rust tests: 98 total (72 single-repo + 26 multi-repo)
+- Python tests: 167 total (57 migrated scope + 110 unmigrated)
+- **Migration Progress: 57/167 Python tests = 34% scope migrated**
 
-**Next Session Priority Tasks:**
+---
 
-**🚨 CRITICAL PRIORITY (Session 19): Validate CLI Actually Works**
+## 📋 **PHASE 7 ROADMAP - FEATURE PARITY**
 
-**IMMEDIATE FIRST STEP** (must do before anything else):
-1. **Create test workspace.conf in project root**:
-   ```
-   # Example workspace.conf for testing
-   https://github.com/rust-lang/rustlings.git main
-   https://github.com/BurntSushi/ripgrep.git master
-   ```
-   - Use small, stable public repos
-   - Test both default branch (no args) and explicit branch
+**Goal**: Achieve full feature parity with bash/Python implementation
 
-2. **Run First CLI Test** (verify it doesn't crash):
-   - `./target/debug/workspace init` (if needed to set up config.toml)
-   - `./target/debug/workspace switch test-ws -f workspace.conf`
-   - **EXPECT**: Either success OR meaningful error message
-   - **IF FAILS**: Debug and fix before proceeding
+**Estimated Duration**: 10-12 sessions
 
-**ONLY IF ABOVE WORKS, THEN:**
+### **TIER 1 - CRITICAL FOR PRODUCTION (Sessions 20-23)**
 
-3. **Full End-to-End Validation**:
-   - Verify repos cloned to correct locations
-   - Test sync: `./target/debug/workspace sync test-ws`
-   - Test foreach: `./target/debug/workspace foreach test-ws "git status"`
-   - Test error cases: nonexistent workspace, missing file, invalid format
+**Session 20: End-to-End CLI Testing with `assert_cmd`** 🚨 BLOCKING
+- Add assert_cmd crate to dev-dependencies
+- Migrate test_integration_workflows.py (10 tests)
+- Add smoke tests for all CLI commands
+- Validate error handling (would have caught Session 19 bug!)
+- **Success Criteria**: All CLI commands tested end-to-end
 
-4. **Documentation** (only after CLI proven working):
-   - Document workspace.conf format
-   - Add usage examples
-   - Write README
+**Sessions 21-22: Repository Repair Command** 🚨 CRITICAL
+- Implement repair() method in WorkspaceManager (146 lines bash → Rust)
+- Handle: broken worktrees, uninitialized repos, standalone→worktree conversion
+- Add CLI command: workspace repair <workspace> <repo>
+- Migrate test_broken_repos.py (6 tests)
+- **Success Criteria**: Can repair all types of broken repositories
 
-**Success Criteria**:
-- ✅ CLI commands execute without crashing
-- ✅ Repositories are actually cloned
-- ✅ Error messages are helpful
-- ✅ All three commands work end-to-end
+**Session 23: Config Management CLI Exposure** ⚠️ HIGH
+- Add CLI commands: config set, show, import, set-default
+- ~160 lines bash → Rust CLI wrappers (library already exists)
+- Expose existing git config operations to CLI
+- **Success Criteria**: Config management accessible from CLI
 
-**Expected Issues to Fix**:
-- File paths may be wrong
-- Workspace base directory creation
-- Error handling gaps
-- Missing config.toml initialization
+### **TIER 2 - IMPORTANT FOR NIX USERS (Sessions 24-29)**
+
+**Sessions 24-27: Nix Flake Input Override System** ⚠️ HIGH
+- Implement 3-tier config inheritance for flake inputs
+- workspace.flake.input.{name}.url git config storage
+- Integration with flake-input-modifier AST library
+- ~260 lines bash → Rust implementation
+- CLI commands: config set-flake-input, show-flake-inputs, set-flake-input-default
+- Migrate test_workspace_advanced.py (~17 tests)
+- **Success Criteria**: Per-workspace flake input overrides working
+
+**Sessions 28-29: Workspace-Specific Flake Generation** ⚠️ MEDIUM-HIGH
+- Implement generate_workspace_flake() (98 lines bash → Rust)
+- AST-based flake.nix modification with overrides
+- Add CLI command: workspace regenerate-flake [workspace]
+- **Success Criteria**: Workspace flakes generated with input overrides
+
+**Session 30: Shell Completion Generation** ⚠️ MEDIUM
+- Add clap_complete crate
+- Auto-generate bash/zsh completions (eliminates 113 lines bash!)
+- Add CLI command: workspace install-completion <shell>
+- Much better than handwritten completions
+- **Success Criteria**: Tab completion works in bash/zsh
+
+### **TIER 3 - POLISH & BEST PRACTICES (Sessions 31+)**
+
+**Session 31: Structured Logging with `tracing`** ✅ LOW
+- Replace println! with proper logging
+- Enables debug output without cluttering tests
+- Better user feedback with log levels
+
+**Session 32: CLI Snapshot Testing with `insta`** ✅ LOW
+- Snapshot test all CLI output
+- Better than string matching for complex output
+
+**Session 33: Parallel Git Operations** ✅ LOW
+- Use rayon for concurrent clone/sync
+- Performance optimization (not correctness)
+
+**Sessions 34-36: Migrate Remaining Python Tests** ✅ LOW-MEDIUM
+- test_superproject_configurations.py (14 tests)
+- test_superproject_edge_cases.py (12 tests)
+- test_missing_coverage.py (12 tests)
+- Remaining test_workspace.py tests
+
+---
+
+## 🎯 **IMMEDIATE NEXT STEPS (Session 20)**
+
+**Priority**: 🚨 **CRITICAL** - End-to-end CLI testing
+
+**Why This Matters**:
+- Session 19 discovered "worktree base not set" bug ONLY through manual testing
+- assert_cmd would have caught this automatically
+- Prevents regressions in CLI layer
+- Required before claiming "production ready"
+
+**What to Implement**:
+1. Add `assert_cmd` crate to Cargo.toml dev-dependencies
+2. Create tests/cli_integration_tests.rs
+3. Migrate test_integration_workflows.py (10 end-to-end tests)
+4. Add smoke tests for all commands:
+   - workspace switch (success and error cases)
+   - workspace sync (success and error cases)
+   - workspace foreach (success and error cases)
+5. Test error handling comprehensively
+
+**Expected Outcome**:
+- 10-15 new CLI integration tests
+- Confidence in CLI behavior
+- Protection against future regressions
+- Foundation for CI automation
 
 ---
 
@@ -324,7 +418,87 @@
 - **Single-User Optimization**: No need for complex configuration compatibility
 - **Test Migration**: Gradual migration of Python tests to native Rust tests
 
-## 📋 **CURRENT TASKS** (2025-11-02 - Session 19: CLI Validation Complete - PHASE 6 DONE!)
+## 📋 **CURRENT TASKS** (2025-11-02 - Session 20: Critical Review Complete - Phase 7 Roadmap Created!)
+
+**Status**: ✅ **CRITICAL REVIEW COMPLETE** - Phase 7 roadmap created with prioritized feature parity plan!
+
+**Completed This Session (Session 20 - Critical Review & Phase 7 Planning)**:
+- [x] ✅ **COMPREHENSIVE BASH SCRIPT ANALYSIS**:
+  - Analyzed all 27 functions (1,481 lines bash)
+  - Identified 6 core features implemented, 6 critical missing features
+  - repair_repository() (146 lines) - COMPLETELY MISSING - 🚨 CRITICAL
+  - Nix flake input override system (~260 lines) - COMPLETELY MISSING
+  - Config management CLI commands (~160 lines) - Library exists, CLI not exposed
+- [x] ✅ **PYTHON TEST SUITE ANALYSIS**:
+  - Counted 167 tests across 12 files (5,095 lines)
+  - Identified 57 tests migrated (34% scope coverage)
+  - 110 tests NOT migrated (66% of test scope)
+  - Critical gap: test_integration_workflows.py (10 end-to-end tests) not migrated
+- [x] ✅ **APPLIED PYTEST_CARGO_MIGRATION.md PRINCIPLES**:
+  - Verified Rust-idiomatic trait-based architecture ✅
+  - Confirmed focus on BEHAVIOR over implementation ✅
+  - Validated property-based testing usage ✅
+  - Identified test pyramid rebalancing (type safety eliminates many tests) ✅
+- [x] ✅ **RUST BEST PRACTICES REVIEW**:
+  - Identified clap_complete opportunity (auto-generate completions, eliminate 113 lines bash)
+  - Identified assert_cmd critical need (would have caught Session 19 bug)
+  - Identified tracing opportunity (structured logging vs println!)
+  - Identified insta opportunity (snapshot testing for CLI output)
+- [x] ✅ **CREATED PHASE 7 ROADMAP**:
+  - 3 tiers of priorities (Critical, Important, Polish)
+  - 10-12 sessions estimated to feature parity
+  - Session 20 immediate priority: End-to-end CLI testing with assert_cmd
+  - Sessions 21-22: Repository repair command (CRITICAL)
+  - Session 23: Config management CLI exposure
+  - Sessions 24-29: Nix flake ecosystem features
+- [x] ✅ **DOCUMENTED ALL FINDINGS IN CLAUDE.md**:
+  - Feature parity analysis (implemented vs missing)
+  - Test coverage analysis (migrated vs unmigrated)
+  - Phase 7 roadmap with session-by-session plan
+  - Immediate next steps for Session 20
+
+**Key Findings**:
+
+**Feature Gaps (vs 27 bash functions)**:
+- ✅ Implemented: 6 core multi-repo operations (switch, sync, status, foreach, list, remove)
+- 🚨 Missing (CRITICAL): repair command (146 lines, handles broken repos)
+- ⚠️ Missing (HIGH): Config CLI commands (library exists, needs CLI exposure)
+- ⚠️ Missing (HIGH): Nix flake input overrides (~260 lines)
+- ⚠️ Missing (MEDIUM): Workspace flake generation (98 lines)
+- ✅ Can eliminate: Shell completions (use clap_complete instead of 113 lines bash)
+
+**Test Gaps (vs 167 Python tests)**:
+- Migrated: 57 tests (34% scope) - single-repo worktree operations
+- Created: 26 multi-repo tests (Phase 4-6)
+- **CRITICAL MISSING**: test_integration_workflows.py (10 end-to-end CLI tests)
+- Missing: test_broken_repos.py (6 repair tests)
+- Missing: test_workspace_advanced.py (~17 flake input tests)
+- Missing: 71 other tests (completions, superproject, edge cases)
+
+**Rust Best Practices Applied**:
+- ✅ Trait-based architecture (RepositoryOps, WorkspaceManager)
+- ✅ Property-based testing (proptest for invariants)
+- ✅ Builder pattern (WorkspaceConfigBuilder)
+- ✅ Drop trait for cleanup (TestWorkspace fixture)
+- ⚠️ Need: assert_cmd for CLI testing (would prevent regressions)
+- ⚠️ Need: tracing for structured logging (replace println!)
+- ⚠️ Opportunity: insta for snapshot testing (CLI output validation)
+
+**Code Analysis**:
+- Bash script: 1,481 lines (27 functions)
+- Python tests: 5,095 lines (167 tests, 12 files)
+- Rust implementation: 5,054 lines (98 tests + library + CLI)
+- **Migration progress: 34% of test scope, 50% of feature scope**
+
+**Next Session Priorities**:
+- 🚨 **CRITICAL**: Implement end-to-end CLI testing with assert_cmd
+- Add 10-15 CLI integration tests
+- Migrate test_integration_workflows.py
+- Prevent future CLI regressions (like Session 19's "worktree base not set")
+
+---
+
+## 📋 **PREVIOUS SESSION TASKS** (Session 19: CLI Validation Complete - PHASE 6 DONE!)
 
 **Status**: ✅ **PHASE 6 100% COMPLETE** - CLI validated end-to-end with real repos!
 
