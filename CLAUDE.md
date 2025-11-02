@@ -26,7 +26,7 @@
 
 **Command to resume:** "Begin work on your top-priority task"
 
-**Phase 6 Status:** ⚠️ **Library Complete, CLI Integration Pending** (~70% complete)
+**Phase 6 Status:** ⚠️ **Library Complete + Semantic Bug Fixed, CLI Integration Pending** (~72% complete)
 
 **What's Done:**
 - ✅ Library layer: All workspace operations implemented (switch, list, remove, foreach, status, sync)
@@ -35,9 +35,9 @@
 - ✅ **ALL 167 library tests passing (100%)**
 - ✅ foreach() uses sh -c for proper environment variable expansion
 - ✅ Multi-repo workspace creation with pinned repo support
+- ✅ **Semantic bug FIXED**: sync() now accurately reports only repos with actual updates
 
 **What's Pending:**
-- ⚠️ **Semantic bug**: sync() reports repos as "updated" even when already up-to-date (pull() needs to return bool)
 - ❌ **CLI integration**: workspace binary doesn't have switch/sync/foreach commands yet
 - ❌ **End-to-end CLI tests**: No tests for actual command-line usage
 - ❌ **Documentation**: User guide not written
@@ -46,7 +46,7 @@
 - **Phase 1-3:** ✅ COMPLETE (Single-repo worktree - 72 tests)
 - **Phase 4:** ✅ COMPLETE (Multi-repo test design - 28 test stubs)
 - **Phase 5:** ✅ COMPLETE (Multi-repo test implementation)
-- **Phase 6 Library:** ✅ COMPLETE (All 167 tests passing)
+- **Phase 6 Library:** ✅ COMPLETE (All 167 tests passing + semantic bug fixed)
 - **Phase 6 CLI:** ❌ NOT STARTED (0% complete)
 
 **Current Test Status:**
@@ -58,10 +58,10 @@
 - **TOTAL: 167/167 library tests passing (100%)**
 
 **Next Session Priority Tasks:**
-1. Fix semantic bug: Make pull() return bool indicating actual changes
-2. Add CLI commands: workspace switch/sync/foreach/list
-3. Add end-to-end CLI tests
-4. Verify user-facing functionality works
+1. Add CLI commands: workspace switch/sync/foreach
+2. Add end-to-end CLI tests
+3. Verify user-facing functionality works
+4. Write user documentation
 
 ---
 
@@ -278,7 +278,42 @@
 - **Single-User Optimization**: No need for complex configuration compatibility
 - **Test Migration**: Gradual migration of Python tests to native Rust tests
 
-## 📋 **CURRENT TASKS** (2025-11-02 - Session 16: Phase 6 Library Complete, CLI Pending)
+## 📋 **CURRENT TASKS** (2025-11-02 - Session 17: Semantic Bug Fix Complete)
+
+**Status**: ✅ **SEMANTIC BUG FIXED** - 167/167 tests passing, accurate sync() reporting!
+
+**Completed This Session (Session 17 - Semantic Bug Fix)**:
+- [x] ✅ Fixed semantic bug in pull() method (changed return type from Result<()> to Result<bool>)
+  - Returns Ok(true) when fast-forward merge succeeds (changes were actually pulled)
+  - Returns Ok(false) when already up-to-date (no changes needed)
+- [x] ✅ Updated sync() to use pull() return value correctly
+  - Only adds repo to repos_updated when pull() returns true
+  - Prevents misleading reports of "updated" when repos already current
+- [x] ✅ ALL 167 tests still passing with no test modifications required
+  - test_sync_pulls_updates_from_all_repos: Correctly reports updates after new commits
+  - test_sync_idempotency: Both syncs correctly report 0 updates (no new commits)
+- [x] ✅ Committed semantic bug fix (commit: 902e8ed)
+
+**Impact of Fix**:
+- **Before**: sync() reported all repos as "updated" even when already up-to-date
+- **After**: sync() accurately reports only repos where changes were actually pulled
+- Users now get truthful feedback about synchronization activity
+- Idempotency property validated: repeated syncs with no remote changes report no updates
+
+**Code Changes Session 17**:
+- workspace-manager/src/workspace.rs: +4 lines, -4 lines (trait signature + pull() impl)
+- workspace-manager/src/workspace.rs: +4 lines, -1 line (sync() to use boolean)
+- Total: +8 lines, -5 lines (net +3 lines of semantic improvements)
+- 1 commit: bugfix (902e8ed) - Semantic bug fix
+
+**Next Session Priorities**:
+- Add CLI commands for multi-repo workspace operations (switch, sync, foreach)
+- CLI integration is substantial work - should be done carefully in fresh session
+- End-to-end CLI testing once commands implemented
+
+---
+
+## 📋 **PREVIOUS SESSION TASKS** (Session 16: Phase 6 Library Complete, CLI Pending)
 
 **Status**: ⚠️ **PHASE 6 LIBRARY COMPLETE** - 167/167 tests passing, CLI integration needed!
 
