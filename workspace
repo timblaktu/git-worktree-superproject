@@ -156,9 +156,9 @@ get_flake_input_url() {
     fi
     
     # Priority 3: Original flake.nix input (if we're in a flake directory)
-    if [[ -f "flake.nix" ]]; then
-        parse_flake_inputs | grep "^$input_name " | cut -d' ' -f3-
-    fi
+    # Note: Only return URLs for actual overrides, not original flake parsing
+    # The generate_workspace_flake function handles original URLs by copying the source
+    return 1
 }
 
 # Generate workspace-specific flake.nix with appropriate inputs
@@ -169,14 +169,11 @@ generate_workspace_flake() {
     
     [[ ! -f "$source_flake" ]] && { echo "Source flake not found: $source_flake" >&2; return 1; }
     
-    # Read the source flake
-    local flake_content
-    flake_content=$(<"$source_flake")
+    # Copy source flake to target location
+    cp "$source_flake" "$target_flake"
     
-    # Parse inputs and apply workspace-specific overrides
-    local modified_content="$flake_content"
-    
-    # Extract the inputs section and process each input
+    # Check if there are any workspace-specific overrides
+    local has_overrides=false
     while IFS= read -r input_line; do
         [[ -z "$input_line" ]] && continue
         
@@ -188,15 +185,53 @@ generate_workspace_flake() {
         override_url=$(get_flake_input_url "$input_name" "$workspace")
         
         if [[ -n "$override_url" ]]; then
-            # Replace the URL in the flake content
-            # Handle both simple format: input.url = "url"
-            # and complex format with follows
-            modified_content=$(echo "$modified_content" | sed -E "s|(^\s*$input_name\.url\s*=\s*\")[^\"]+(\";.*$)|\1$override_url\2|")
+            has_overrides=true
+            break
         fi
     done < <(parse_flake_inputs "$source_flake")
     
-    # Write the modified flake
-    echo "$modified_content" > "$target_flake"
+    # Only process inputs if there are actual overrides
+    if [[ "$has_overrides" == "true" ]]; then
+        # Extract the inputs section and process each input
+        while IFS= read -r input_line; do
+            [[ -z "$input_line" ]] && continue
+            
+            local input_name url_part
+            read -r input_name url_part <<< "$input_line"
+            
+            # Check if there's a workspace-specific override for this input
+            local override_url
+            override_url=$(get_flake_input_url "$input_name" "$workspace")
+            
+            if [[ -n "$override_url" ]]; then
+                # Extract current URL from flake for AST tool
+                local current_url
+                current_url=$(grep -E "^\s*$input_name\.url\s*=" "$target_flake" | sed -E 's/.*=\s*"([^"]+)".*/\1/')
+                
+                # Use AST-based replacement with graceful fallback to sed
+                local ast_binary="$WORKSPACE_ROOT/bin/flake-input-modifier"
+                if [[ -x "$ast_binary" && -n "$current_url" ]] && "$ast_binary" "$target_flake" "$input_name" "$current_url" "$override_url" --in-place 2>/dev/null; then
+                    # AST modification succeeded
+                    true
+                else
+                    # Fallback to sed-based replacement
+                    if [[ -z "$current_url" ]]; then
+                        echo "  Info: Using sed fallback for $input_name (complex flake structure)" >&2
+                    else
+                        echo "  Warning: AST modification failed for $input_name, using sed fallback" >&2
+                    fi
+                    # Read the current flake content
+                    local flake_content
+                    flake_content=$(<"$target_flake")
+                    # Handle both simple format: input.url = "url"
+                    # and complex format with follows
+                    local modified_content
+                    modified_content=$(echo "$flake_content" | sed -E "s|(^\s*$input_name\.url\s*=\s*\")[^\"]+(\";.*$)|\1$override_url\2|")
+                    echo "$modified_content" > "$target_flake"
+                fi
+            fi
+        done < <(parse_flake_inputs "$source_flake")
+    fi
 }
 
 # Ensure central repository exists

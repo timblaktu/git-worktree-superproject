@@ -25,3 +25,8 @@ __pycache__/
 
 **/*.log
 pytest-result-bar/
+
+# Rust
+**/target/
+Cargo.lock
+*.rs.bk
