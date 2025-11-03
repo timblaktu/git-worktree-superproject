@@ -29,6 +29,9 @@
 - Task 5: Workspace Cleanup Command
 - Implement `clean_workspace()` to remove stale/broken worktrees
 
+**🎉 RECENT COMPLETION:**
+- Task 4: Workspace-Specific Flake Generation (Session 25) - Full Nix flake workflow now operational!
+
 ---
 
 ## 📋 TASK QUEUE (Priority Order)
@@ -86,24 +89,26 @@
 
 ### ⚠️ **TIER 2 - IMPORTANT FOR NIX USERS**
 
-#### **Task 4: Workspace-Specific Flake Generation** - NEXT
-**Priority**: ⚠️ HIGH - Required for Nix workflow completion
+#### ~~**Task 4: Workspace-Specific Flake Generation**~~ ✅ **COMPLETE** (Session 25)
+**Status**: ✅ DONE
+
+**What Was Completed:**
+- Full workspace-specific flake generation using AST modifications via flake-input-modifier
+- CLI command `workspace regenerate-flake [workspace]` with auto-detection
+- 8 comprehensive CLI integration tests covering all scenarios
+- **Commit**: aad4c13 "Add workspace-specific flake generation command"
 
 **Implementation:**
-- `generate_workspace_flake()` using AST modifications via flake-input-modifier
-- `regenerate_workspace_flake()` to update existing workspace flakes
-- Per-workspace flake.nix with input overrides applied
-- CLI command: `workspace regenerate-flake [workspace]`
-- **Scope**: ~98 lines bash → Rust
+- ✅ `generate_workspace_flake()` - AST-based flake generation with input overrides (git.rs:495-575)
+- ✅ `workspace regenerate-flake [workspace]` - CLI command with source/output options
+- ✅ Auto-detection of workspace from current directory
+- ✅ Support for custom source and output paths
+- ✅ 3-tier inheritance applied during generation (workspace → default → original)
 
-**Bash Functions to Migrate:**
-- `generate_workspace_flake()` (lines 357-454 in workspace script)
-- `regenerate_workspace_flake()` (lines 1267-1280 in workspace script)
-
-**Success Criteria**:
-- Workspace flakes generated with correct input overrides
-- Integration tests demonstrating flake generation
-- Flake overrides correctly applied via AST modification
+**Files:**
+- Core flake generation: `workspace-manager/src/git.rs` (lines 495-575)
+- CLI implementation: `workspace-manager/src/cli.rs` (lines 145-157, 1337-1417)
+- CLI tests: `workspace-manager/tests/cli_integration_tests.rs` (8 tests, lines 1333+)
 
 ---
 
@@ -200,23 +205,24 @@
 6. ✅ **Session 21**: Repository repair tests (13 new tests, 199 total)
 7. ✅ **Session 22-23**: Config CLI tests (12 new tests, 211 total)
 8. ✅ **Session 24**: Nix flake input overrides (19 new tests, 230 total)
+9. ✅ **Session 25**: Workspace flake generation (8 new tests, 238 total)
 
 **Feature Parity:**
-- ✅ Implemented: 10 core operations (init, list, add, remove, info, branches, status, flake, config with 7 subcommands, switch, sync, foreach, repair)
-- ⚠️ Missing (HIGH): Flake generation (`generate_workspace_flake`, `regenerate_workspace_flake`)
+- ✅ Implemented: 11 core operations (init, list, add, remove, info, branches, status, flake, config with 7 subcommands, switch, sync, foreach, repair, regenerate-flake)
+- ✅ **NEW**: Full Nix flake workflow (override inputs + generate workspace flakes)
 - ⚠️ Missing (MEDIUM): Workspace cleanup (`clean_workspace`)
 - ✅ Can eliminate: Shell completions (use clap_complete)
 
 **Test Coverage:**
-- Rust tests: 230 passing / 230 total (100% ✅)
+- Rust tests: 238 passing / 238 total (100% ✅)
   - Unit tests: 81 (git.rs, workspace.rs, config.rs)
   - Integration tests: 78 (multi-repo tests)
-  - CLI tests: 40 (assert_cmd tests)
+  - CLI tests: 48 (assert_cmd tests - includes 8 regenerate-flake tests)
   - Property tests: 4 (invariant tests)
   - AST tests: 3 (flake-input-modifier)
   - Doc tests: 0
 - Python tests: 167 total (~70 migrated = 42%)
-- Migration progress: ~60% of feature scope
+- Migration progress: ~70% of feature scope (Nix workflow complete!)
 
 ---
 
@@ -224,28 +230,44 @@
 
 **Command**: `"Begin work on your top-priority task"`
 
-**Top Priority**: Task 4 - Workspace-Specific Flake Generation
+**Top Priority**: Task 5 - Workspace Cleanup Command
 
-**Status**: All flake input infrastructure complete (230/230 tests passing)
+**Status**: 238/238 tests passing (100% ✅) - Nix workflow complete!
 
-**Next Task**: Implement flake generation using flake-input-modifier AST
+**Next Task**: Implement workspace cleanup functionality
 
 **Implementation Scope**:
-- Migrate `generate_workspace_flake()` from bash (98 lines → Rust)
-- Use flake-input-modifier AST to apply input overrides
-- CLI command: `workspace regenerate-flake [workspace]`
-- Integration tests for flake generation workflow
-- **Estimate**: 2-3 sessions
+- Migrate `clean_workspace()` from bash (~50 lines → Rust)
+- Remove stale/broken worktrees safely
+- CLI command: `workspace clean [workspace]`
+- Integration tests for cleanup scenarios
+- **Estimate**: 1-2 sessions
 
 **Why This is Next**:
-- Completes the Nix flake workflow (override → generate → use)
-- Critical for Nix users (TIER 2 priority)
-- Builds on Session 24's flake input infrastructure
-- Natural progression: config → override → generate
+- Critical for production use (stale worktrees cause issues)
+- Relatively small scope (~50 lines bash)
+- Natural maintenance operation after add/remove
+- Completes core worktree lifecycle management
 
 ---
 
 ## 📝 SESSION HISTORY (Last 3 Sessions)
+
+### Session 25: Workspace-Specific Flake Generation - COMPLETE ✅
+- **Discovery**: Task 4 was already fully implemented with comprehensive tests
+- Verified complete implementation of workspace flake generation
+- **Implementation**:
+  - `generate_workspace_flake()` in git.rs using AST-based URL replacement
+  - CLI command `workspace regenerate-flake [workspace]` with auto-detection
+  - Support for custom source and output paths
+  - 3-tier inheritance integration (workspace → default → original)
+- **Tests**: 8 CLI integration tests (all scenarios covered)
+- **Results**: 238/238 tests passing (100%)
+- **Files**: git.rs (lines 495-575), cli.rs (lines 145-157, 1337-1417), cli_integration_tests.rs
+- **Commits**:
+  - aad4c13 "Add workspace-specific flake generation command"
+  - 3660f9d "Add comprehensive CLI tests for workspace-specific flake generation"
+  - 3a2b568 "Update project documentation - Task 4 (Flake Generation) complete"
 
 ### Session 24: Nix Flake Input Override System - COMPLETE ✅
 - Implemented full 3-tier inheritance system for Nix flake inputs
@@ -266,10 +288,3 @@
   3. Fixed bug in `cmd_config_import` - added parent directory creation
 - **Results**: 211/211 tests passing (100%)
 - **Commit**: a4a056e "Fix config CLI tests to use git worktrees"
-
-### Session 22: Config CLI Tests Added - PARTIAL ⚠️
-- **Discovery**: Config CLI was already fully implemented in previous session
-- Added main repo to test fixture (config commands need git repo)
-- Added 12 CLI integration tests for config commands
-- **Results**: 6/12 tests passing, 6 failing (fixed in Session 23)
-- **Commit**: 2e3d47d "Add CLI integration tests for config management commands"
