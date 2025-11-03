@@ -155,6 +155,12 @@ pub enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+
+    /// Remove a multi-repo workspace and all its repositories
+    Clean {
+        /// Name of the workspace to remove
+        workspace: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -351,6 +357,9 @@ pub fn execute_command(args: Args) -> Result<()> {
             output,
         } => {
             cmd_regenerate_flake(config, workspace, source, output)?;
+        }
+        Commands::Clean { workspace } => {
+            cmd_clean_workspace(config, workspace)?;
         }
     }
 
@@ -1436,6 +1445,39 @@ fn cmd_regenerate_flake(
     } else {
         println!("\nNo input overrides configured (flake copied as-is)");
     }
+
+    Ok(())
+}
+
+fn cmd_clean_workspace(config: Config, workspace: String) -> Result<()> {
+    info!("Cleaning workspace '{}'", workspace);
+
+    let workspace_path = config.worktree_base.join(&workspace);
+
+    // Check if workspace exists
+    if !workspace_path.exists() {
+        return Err(WorkspaceError::WorktreeError(format!(
+            "Workspace '{}' does not exist at {}",
+            workspace,
+            workspace_path.display()
+        )));
+    }
+
+    // Create workspace manager and initialize worktree_base
+    let manager = WorkspaceManagerImpl::new_with_real_git();
+    manager.set_worktree_base(config.worktree_base.clone());
+
+    println!("Removing multi-repo workspace '{}'...", workspace);
+    println!("  Location: {}", workspace_path.display());
+    println!();
+
+    // Call the backend remove() method to delete the entire workspace
+    manager
+        .remove(&workspace)
+        .map_err(|e| WorkspaceError::WorktreeError(format!("Clean failed: {}", e)))?;
+
+    println!("✓ Workspace '{}' removed successfully", workspace);
+    println!("  All repositories and configuration have been deleted");
 
     Ok(())
 }

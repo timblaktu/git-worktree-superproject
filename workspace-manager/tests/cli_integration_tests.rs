@@ -1834,3 +1834,129 @@ fn test_regenerate_flake_multiple_inputs_with_mixed_overrides() {
         "flake-utils should remain in output"
     );
 }
+
+// ============================================================================
+// Clean Command Tests
+// ============================================================================
+
+#[test]
+fn test_clean_removes_multi_repo_workspace() {
+    let fixture = CliTestFixture::new();
+
+    // Create a multi-repo workspace using switch
+    let mut cmd_switch = fixture.workspace_cmd();
+    cmd_switch
+        .args([
+            "switch",
+            "clean-test",
+            "--config-file",
+            fixture.config_path.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+    cmd_switch.assert().success();
+
+    // Verify workspace exists
+    let workspace_path = fixture.path().join(".worktrees").join("clean-test");
+    assert!(workspace_path.exists(), "Workspace should exist");
+    assert!(
+        workspace_path.join("repo-a").exists(),
+        "repo-a should exist"
+    );
+    assert!(
+        workspace_path.join("repo-b").exists(),
+        "repo-b should exist"
+    );
+
+    // Clean the workspace
+    let mut cmd_clean = fixture.workspace_cmd();
+    cmd_clean
+        .args(["clean", "clean-test"])
+        .current_dir(fixture.path());
+
+    cmd_clean
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Removing multi-repo workspace"))
+        .stdout(predicate::str::contains("removed successfully"));
+
+    // Verify workspace was removed
+    assert!(
+        !workspace_path.exists(),
+        "Workspace directory should be removed"
+    );
+}
+
+#[test]
+fn test_clean_nonexistent_workspace_fails() {
+    let fixture = CliTestFixture::new();
+
+    // Try to clean a workspace that doesn't exist
+    let mut cmd_clean = fixture.workspace_cmd();
+    cmd_clean
+        .args(["clean", "nonexistent-workspace"])
+        .current_dir(fixture.path());
+
+    cmd_clean
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("does not exist"));
+}
+
+#[test]
+fn test_clean_removes_all_repos_and_config() {
+    let fixture = CliTestFixture::new();
+
+    // Create a multi-repo workspace
+    let mut cmd_switch = fixture.workspace_cmd();
+    cmd_switch
+        .args([
+            "switch",
+            "full-clean-test",
+            "--config-file",
+            fixture.config_path.to_str().unwrap(),
+        ])
+        .current_dir(fixture.path());
+    cmd_switch.assert().success();
+
+    let workspace_path = fixture.path().join(".worktrees").join("full-clean-test");
+
+    // Verify all components exist
+    assert!(workspace_path.exists(), "Workspace should exist");
+    assert!(
+        workspace_path.join("repo-a").exists(),
+        "repo-a should exist"
+    );
+    assert!(
+        workspace_path.join("repo-b").exists(),
+        "repo-b should exist"
+    );
+    assert!(
+        workspace_path.join(".workspace-config.json").exists(),
+        "Config file should exist"
+    );
+
+    // Clean the workspace
+    let mut cmd_clean = fixture.workspace_cmd();
+    cmd_clean
+        .args(["clean", "full-clean-test"])
+        .current_dir(fixture.path());
+    cmd_clean.assert().success();
+
+    // Verify complete removal
+    assert!(
+        !workspace_path.exists(),
+        "Entire workspace directory should be removed"
+    );
+    assert!(
+        !workspace_path.join("repo-a").exists(),
+        "repo-a should be removed"
+    );
+    assert!(
+        !workspace_path.join("repo-b").exists(),
+        "repo-b should be removed"
+    );
+    assert!(
+        !workspace_path.join(".workspace-config.json").exists(),
+        "Config file should be removed"
+    );
+}
