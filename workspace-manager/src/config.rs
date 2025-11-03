@@ -128,6 +128,7 @@ impl RepoConfig {
     }
 
     /// Validate workspace name (no invalid characters, not empty)
+    #[allow(dead_code)] // Used in tests
     pub fn validate_workspace_name(name: &str) -> Result<()> {
         if name.is_empty() {
             return Err(WorkspaceError::ConfigError(
@@ -147,6 +148,7 @@ impl RepoConfig {
     }
 
     /// Validate URL (not empty)
+    #[allow(dead_code)] // Used in tests
     pub fn validate_url(url: &str) -> Result<()> {
         if url.trim().is_empty() {
             return Err(WorkspaceError::ConfigError(
@@ -157,6 +159,7 @@ impl RepoConfig {
     }
 
     /// Format as git config value (for storing in workspace.repo)
+    #[allow(dead_code)] // Used in tests
     pub fn to_config_value(&self) -> String {
         let mut value = format!("{} {}", self.url, self.branch);
         if let Some(ref git_ref) = self.git_ref {

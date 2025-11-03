@@ -62,9 +62,11 @@ pub trait WorkspaceManager {
     fn sync(&self, workspace_name: &str) -> Result<SyncReport>;
 
     /// List all available workspaces
+    #[allow(dead_code)] // Part of trait API, used internally
     fn list(&self) -> Result<Vec<WorkspaceInfo>>;
 
     /// Remove a workspace
+    #[allow(dead_code)] // Part of trait API, will be exposed in CLI (Task 5)
     fn remove(&self, workspace_name: &str) -> Result<()>;
 
     /// Execute a command in each repository of the workspace
@@ -74,6 +76,7 @@ pub trait WorkspaceManager {
     ///
     /// If workspace_name is None, returns status of all workspaces.
     /// If specified, returns status of the named workspace only.
+    #[allow(dead_code)] // Part of trait API, future feature
     fn status(&self, workspace_name: Option<String>) -> Result<StatusReport>;
 
     /// Repair a broken repository in a workspace
@@ -98,11 +101,13 @@ pub struct WorkspaceConfig {
     /// Base directory for worktrees
     pub worktree_base: PathBuf,
     /// Default branch name
+    #[allow(dead_code)] // Part of config, may be used in future
     pub default_branch: String,
 }
 
 /// Information about a workspace
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)] // Constructed in list() method, part of trait API
 pub struct WorkspaceInfo {
     /// Name of the workspace
     pub name: String,
@@ -198,6 +203,7 @@ pub enum RepoStatus {
 
 /// Status report for one or more workspaces
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)] // Returned by status() trait method, future CLI feature
 pub struct StatusReport {
     /// Status of each workspace
     pub workspaces: Vec<WorkspaceStatus>,
@@ -205,6 +211,7 @@ pub struct StatusReport {
 
 /// Status of a single workspace
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)] // Part of StatusReport, future CLI feature
 pub struct WorkspaceStatus {
     /// Name of the workspace
     pub name: String,
@@ -214,6 +221,7 @@ pub struct WorkspaceStatus {
 
 /// Status of a repository within a workspace
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)] // Part of WorkspaceStatus, future CLI feature
 pub struct RepositoryStatus {
     /// Name of the repository
     pub name: String,
@@ -274,6 +282,7 @@ impl WorkspaceConfigBuilder {
     }
 
     /// Add a repository with a specific branch
+    #[allow(dead_code)] // Used extensively in tests
     pub fn add_repo(mut self, url: impl Into<String>, branch: impl Into<String>) -> Self {
         self.repos.push(RepoConfig {
             url: url.into(),
@@ -284,6 +293,7 @@ impl WorkspaceConfigBuilder {
     }
 
     /// Add a pinned repository (specific tag or commit)
+    #[allow(dead_code)] // Used in tests
     pub fn add_pinned_repo(mut self, url: impl Into<String>, reference: impl Into<String>) -> Self {
         self.repos.push(RepoConfig {
             url: url.into(),
@@ -300,6 +310,7 @@ impl WorkspaceConfigBuilder {
     }
 
     /// Set the default branch name
+    #[allow(dead_code)] // Part of builder API, may be used in future
     pub fn default_branch(mut self, branch: impl Into<String>) -> Self {
         self.default_branch = branch.into();
         self
@@ -347,7 +358,7 @@ impl RepositoryOps for RealRepositoryOps {
         }
 
         // Set up fetch options to clone only the specified branch
-        let mut fetch_opts = FetchOptions::new();
+        let fetch_opts = FetchOptions::new();
         // Use default callbacks - no progress tracking for now
 
         // Clone the repository
@@ -360,7 +371,7 @@ impl RepositoryOps for RealRepositoryOps {
     }
 
     fn pull(&self, path: &Path) -> Result<bool> {
-        use git2::{BranchType, Repository};
+        use git2::Repository;
 
         let repo = Repository::open(path)?;
 

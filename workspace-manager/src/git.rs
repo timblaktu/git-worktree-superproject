@@ -22,16 +22,19 @@ impl GitOps {
     }
 
     /// Get the repository path
+    #[allow(dead_code)] // Part of GitOps API, used in tests
     pub fn path(&self) -> &Path {
         self.repo.path()
     }
 
     /// Get the working directory path
+    #[allow(dead_code)] // Part of GitOps API, future feature
     pub fn workdir(&self) -> Option<&Path> {
         self.repo.workdir()
     }
 
     /// Check if the repository is bare
+    #[allow(dead_code)] // Part of GitOps API, used in tests
     pub fn is_bare(&self) -> bool {
         self.repo.is_bare()
     }
@@ -64,6 +67,7 @@ impl GitOps {
     }
 
     /// Create a new branch from the current HEAD
+    #[allow(dead_code)] // Part of GitOps API, used in tests
     pub fn create_branch(&self, name: &str, force: bool) -> Result<()> {
         let head = self.repo.head()?;
         let commit = head.peel_to_commit()?;
@@ -161,6 +165,7 @@ impl GitOps {
     }
 
     /// Get the default branch name (usually main or master)
+    #[allow(dead_code)] // Part of GitOps API, future feature
     pub fn default_branch(&self) -> Result<String> {
         // Try to get the remote's HEAD
         if let Ok(remote) = self.repo.find_remote("origin") {
@@ -287,6 +292,7 @@ impl GitOps {
     }
 
     /// Remove all values for a git config key
+    #[allow(dead_code)] // Part of GitOps API, used in tests
     pub fn config_unset_all(&self, key: &str) -> Result<()> {
         let mut config = self.repo.config()?;
         config.remove_multivar(key, ".*")?;
@@ -405,6 +411,7 @@ impl GitOps {
     /// 1. Workspace-specific (worktree config)
     /// 2. Default (superproject config)
     /// 3. None (caller should use flake.nix)
+    #[allow(dead_code)] // Part of GitOps API, used in tests
     pub fn get_flake_input(&self, input_name: &str) -> Result<Option<String>> {
         let key = format!("workspace.flake.input.{}.url", input_name);
 

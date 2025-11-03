@@ -12,6 +12,7 @@ pub enum WorkspaceError {
     ConfigError(String),
 
     #[error("Invalid repository path: {0}")]
+    #[allow(dead_code)] // Future validation feature
     InvalidPath(String),
 
     #[error("Worktree operation failed: {0}")]

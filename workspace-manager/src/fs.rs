@@ -7,23 +7,27 @@ pub struct FileSystem;
 
 impl FileSystem {
     /// Create a directory with all parent directories
+    #[allow(dead_code)] // Used in tests
     pub fn create_dir_all(path: &Path) -> Result<()> {
         std::fs::create_dir_all(path)?;
         Ok(())
     }
 
     /// Remove a directory and all its contents
+    #[allow(dead_code)] // Used in tests
     pub fn remove_dir_all(path: &Path) -> Result<()> {
         std::fs::remove_dir_all(path)?;
         Ok(())
     }
 
     /// Check if a path exists
+    #[allow(dead_code)] // Used in tests
     pub fn exists(path: &Path) -> bool {
         path.exists()
     }
 
     /// Check if a path is a directory
+    #[allow(dead_code)] // Used in tests
     pub fn is_dir(path: &Path) -> bool {
         path.is_dir()
     }
@@ -39,6 +43,7 @@ impl FileSystem {
     }
 
     /// Find files matching a pattern in a directory
+    #[allow(dead_code)] // Future feature
     pub fn find_files(dir: &Path, pattern: &str) -> Result<Vec<PathBuf>> {
         let mut files = Vec::new();
 
@@ -60,6 +65,7 @@ impl FileSystem {
     }
 
     /// Get the canonical absolute path
+    #[allow(dead_code)] // Future feature
     pub fn canonicalize(path: &Path) -> Result<PathBuf> {
         let expanded = Self::expand_tilde(path);
         Ok(std::fs::canonicalize(expanded)?)
