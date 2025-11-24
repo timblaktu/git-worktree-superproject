@@ -27,5 +27,6 @@ pytest-result-bar/
 
 # Rust
 **/target/
-Cargo.lock
+# Cargo.lock is needed for Nix builds (reproducibility)
+# Cargo.lock
 *.rs.bk
