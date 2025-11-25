@@ -7,6 +7,7 @@
 , stdenv
 , darwin
 , makeWrapper
+, perl
 }:
 
 rustPlatform.buildRustPackage rec {
@@ -22,6 +23,7 @@ rustPlatform.buildRustPackage rec {
   nativeBuildInputs = [
     pkg-config
     makeWrapper
+    perl # Required for building OpenSSL from source
   ];
 
   buildInputs = [
