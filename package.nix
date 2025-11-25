@@ -4,10 +4,10 @@
 , pkg-config
 , openssl
 , git
+, libgit2
 , stdenv
 , darwin
 , makeWrapper
-, perl
 }:
 
 rustPlatform.buildRustPackage rec {
@@ -23,15 +23,19 @@ rustPlatform.buildRustPackage rec {
   nativeBuildInputs = [
     pkg-config
     makeWrapper
-    perl # Required for building OpenSSL from source
   ];
 
   buildInputs = [
     openssl
+    libgit2
   ] ++ lib.optionals stdenv.isDarwin [
     darwin.apple_sdk.frameworks.Security
     darwin.apple_sdk.frameworks.SystemConfiguration
   ];
+
+  # Use system libraries instead of vendored ones
+  OPENSSL_NO_VENDOR = 1;
+  LIBGIT2_NO_VENDOR = 1;
 
   # The binary is called 'workspace' from the workspace-manager package
   cargoBuildFlags = [ "--package" "workspace-manager" ];
